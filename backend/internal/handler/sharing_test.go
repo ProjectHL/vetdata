@@ -149,6 +149,40 @@ func TestLastAdminAndCrossClinicMembership(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 }
+func TestExpiredGrantDeniesRead(t *testing.T) {
+	f, _, other, pid, _ := setupSharing(t)
+	ctx := context.Background()
+	w := f.request("POST", "/api/v1/sharing/requests", sharingInput{PatientIDs: []string{pid}, Scope: "Ficha completa", Reason: "Continuidad clínica"}, other...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var qs []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid := qs[0]["id"].(string)
+	if _, err := f.mail.DeliverOne(ctx); err != nil {
+		t.Fatal(err)
+	}
+	raw := strings.Split(f.sender.messages[len(f.sender.messages)-1].Body, "&token=")[1]
+	w = f.request("POST", "/api/v1/owner/sharing/requests/"+qid+"/decision", map[string]any{"token": raw, "rut": "12345678-5", "approve": true, "scope": "Ficha completa"})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/patients/"+pid, nil, other...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if _, err := f.pool.Exec(ctx, "UPDATE sharing_grants SET since=(CURRENT_DATE-10),until=(CURRENT_DATE-1) WHERE patient_id=$1 AND granted_to=$2 AND revoked_at IS NULL", pid, f.other); err != nil {
+		t.Fatal(err)
+	}
+	w = f.request("GET", "/api/v1/patients/"+pid, nil, other...)
+	if w.Code != 404 {
+		t.Fatal("expired grant", w.Code)
+	}
+	w = f.request("GET", "/api/v1/patients", nil, other...)
+	if w.Code != 200 || strings.Contains(w.Body.String(), pid) {
+		t.Fatal("expired listed", w.Code)
+	}
+}
 func TestInviteAcceptSingleUseAndExpiry(t *testing.T) {
 	f, own, _, _, _ := setupSharing(t)
 	ctx := context.Background()
