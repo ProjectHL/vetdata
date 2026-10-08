@@ -1,5 +1,8 @@
 # Usuarios, roles, permisos y ajustes de clínica
 
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-10 sustituye red.aprobar/red.revocar por red.suspender, exclusivo de Admin origen. Política de clínica no exime consentimiento del dueño; requireConsent/shareConsent del demo no son autorización real. Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+
+
 > Fuentes: `src/domain/settings.ts` (`Role`, `ROLES`, `Permission`, `PERMISSIONS`, `RolePermissions`, `User`, `UserStatus`, `ClinicProfile`, `SharingPolicy`) · `src/mocks/settings.ts` (`defaultRolePermissions`, `seedUsers`, `demoUserByRole`, `seedClinicProfile`, `seedSharingPolicy`) · `src/services/contracts.ts` (`SettingsService`) · `src/services/mock/settings.ts` · `src/lib/store.tsx` (ajustes, `useCan`, `useDoctors`) · `src/components/settings/*` (`guard.tsx`, `users-table.tsx`, `permissions-matrix.tsx`, `profile.tsx`) · `src/components/topbar.tsx` ("Ver como")
 
 ## Propósito

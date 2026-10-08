@@ -107,6 +107,8 @@ infra/docker-compose.yml          # Stack web+api+db
 
 Para conocer la arquitectura completa, consulte [ARCHITECTURE.md](ARCHITECTURE.md). Para definir la API futura, consulte [docs/backend/README.md](docs/backend/README.md).
 
+El [roadmap de ocho fases](docs/roadmap/README.md) detalla entregables, dependencias y criterios de cierre para revisar con el desarrollador. La [matriz de validación](docs/roadmap/validacion.md) registra el avance y la evidencia; las reglas de producto se rigen por [DECISIONES.md](docs/DECISIONES.md).
+
 ## 🔐 Comportamiento del prototipo
 
 - Los datos se almacenan en memoria y se pierden al recargar la página.

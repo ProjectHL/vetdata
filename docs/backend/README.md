@@ -5,16 +5,19 @@
 
 ## 1. Qué es VetData
 
-Dashboard SaaS para clínicas veterinarias en Chile. Cada clínica (tenant) gestiona su agenda, boxes, fichas, facturas, farmacia interna, tienda de productos, seguridad (cámaras, cerraduras, alarma) y soporte con VetData. Lo distintivo: las clínicas forman una **red** y pueden **compartir fichas de mascotas** entre ellas, siempre con solicitud, aprobación de la clínica de origen, consentimiento del dueño, alcance y vigencia.
+Dashboard SaaS para clínicas veterinarias en Chile. Cada clínica (tenant) gestiona su agenda, boxes, fichas, facturas, farmacia interna, tienda de productos, seguridad (cámaras, cerraduras, alarma) y soporte con VetData. Lo distintivo: las clínicas forman una **red** y pueden **compartir fichas de mascotas** entre ellas, mediante solicitud, autorización del dueño, alcance y vigencia. La clínica de origen custodia y dispone del freno de emergencia red.suspender para Admin conforme a p-10.
 
 ## 2. Alcance de esta documentación
 
 - **Incluye**: entidades con campos y restricciones, reglas de negocio (con su fuente en el código), máquinas de estado, permisos, endpoints sugeridos, efectos cruzados entre dominios, eventos/notificaciones y decisiones pendientes.
 - **No incluye**: código de servidor, esquema de base de datos/DDL, infraestructura. Las entidades se describen a nivel lógico.
-- **Fuente de verdad**: `src/services/contracts.ts` (96 operaciones = 96 endpoints), `src/domain/*` (tipos y reglas puras), stores `src/lib/*store*.tsx` (efectos de cada mutación), `src/services/mock/*` (cómo debería responder el servidor).
-- Todo lo que el prototipo **simula** o **no resuelve** está en [`preguntas-abiertas.md`](preguntas-abiertas.md).
+- **Autoridad de producto**: [DECISIONES.md](../DECISIONES.md). [Roadmap](../roadmap/README.md) y [validación](../roadmap/validacion.md) describen ejecución y evidencia. `frontend/src/services/contracts.ts`, tipos, stores y mocks son inventario del prototipo; sus 96 operaciones no son endpoints implementados.
+- [`preguntas-abiertas.md`](preguntas-abiertas.md) conserva preguntas históricas; comprobar su estado en DECISIONES y los gates D del roadmap antes de reabrir decisiones.
 
 ## 3. Cómo leer
+
+Las rutas src/ de esta documentación refieren a frontend/src/. Los documentos de dominio conservan inventarios demo donde se indica; p-NN prevalece. El contrato de red, permisos, estados y eventos señalan los cambios objetivo todavía pendientes en código.
+
 
 | Archivo | Para qué |
 |---|---|
@@ -42,14 +45,14 @@ Convenciones en el texto:
 | **Tenant / clínica** | Cliente de VetData. Todo dato operativo pertenece a una clínica. Hoy se identifica por **nombre** (`Patient.clinic`, `AccessGrant.ownerClinic`, `AccessRequest.from/to`); el backend debe usar un `clinicId` estable. |
 | **Clínica actual** | La del usuario autenticado (`network.getCurrentClinic`). En el prototipo es fija: "Clínica Vet Providencia" (`src/mocks/network.ts:currentClinic`). |
 | **Red** | Conjunto de clínicas conectadas a VetData (`Clinic`, estado `Conectada` o `Invitación pendiente`). |
-| **Clínica de origen** | Dueña del dato clínico de una mascota (`Patient.clinic`). Es la única que puede aprobar o revocar accesos. |
+| **Clínica de origen** | Custodia de la ficha de una mascota. El dueño autoriza; Admin origen puede suspender/restablecer por causa. |
 | **Nivel de acceso: propio / compartido / sin acceso** | Resultado de `accessLevel()`: `propio` si la mascota es de mi clínica; `compartido` si tengo un acceso (grant) **vigente**; `ninguno` en otro caso. Fuente: `src/domain/sharing.ts:accessLevel`. |
-| **Solicitud de acceso (AccessRequest)** | Pedido de una clínica a la de origen para ver la ficha de una mascota. Estados `Pendiente → Aprobada | Rechazada`. |
-| **Acceso / grant (AccessGrant)** | Permiso otorgado por la clínica de origen a otra clínica sobre **una** mascota, con alcance y vigencia. |
+| **Solicitud de acceso (AccessRequest)** | Pedido de una clínica al dueño para ver una mascota. Esperando dueño → Aprobada, Denegada, Expirada o Cancelada. |
+| **Acceso / grant (AccessGrant)** | Autorización del dueño a una clínica sobre una mascota, con alcance, vigencia y evidencia por grant. |
 | **Alcance (scope)** | `Ficha completa` (todo) o `Resumen clínico` (solo alergias, condiciones crónicas y vacunas; sin consultas, exámenes ni recetas). Fuente: `src/components/sharing/access-gate.tsx:PatientSummary`. |
 | **Vigencia (duration)** | 30 días, 90 días o permanente (`null`). Al aprobar se convierte en `until = since + días`. |
-| **Revocación** | La clínica de origen apaga un grant (`revoked = true`). Irreversible; para volver a compartir se requiere otra solicitud. |
-| **Consentimiento del dueño** | `Owner.shareConsent` (registrado) + política de la clínica `SharingPolicy.requireConsent`. Si la política lo exige y el dueño no tiene consentimiento, quien aprueba debe declarar que el dueño autorizó. |
+| **Revocación / suspensión** | El dueño revoca consentimiento; Admin origen puede suspender/restablecer por causa. Restablecer no revive un grant revocado o vencido. |
+| **Consentimiento del dueño** | Autorización por email-link de un uso, RUT verificado y evidencia por grant. La política de clínica no permite omitirla. |
 | **Box** | Sala de atención (`Room` con `kind = "box"`). Por extensión el "mapa de Actividad" incluye quirófano, imagen, laboratorio, hospitalización y áreas comunes. Estados `disponible → ocupado → limpieza → disponible`. |
 | **Sala de espera** | Lista de pacientes con cita de hoy que ya llegaron (`WaitingEntry`). Aforo `WAITING_CAPACITY = 12`. |
 | **Llegada (check-in)** | Registrar que el cliente de una cita de hoy entró: crea un ingreso en el hall (`AccessEntry`) y una entrada en la sala de espera. |
@@ -57,7 +60,7 @@ Convenciones en el texto:
 | **Pendientes / tareas** | Bandeja unificada de trabajo derivada del estado de todos los módulos (`src/lib/tasks.ts:useTasks`). Solo se persiste asignación y "hecho". |
 | **Derivación / receta (Referral)** | "Ficha de medicamentos" que un veterinario envía a la farmacia interna o a otra clínica. Al dispensarla en farmacia interna se descuenta stock. |
 | **Kardex** | Registro de movimientos de inventario (entradas, salidas, ajustes) con saldo. Farmacia: `StockMovement`; Tienda: `RetailMovement`. |
-| **OC** | Orden de compra a proveedor. Farmacia: `PurchaseOrder`; Tienda: `RetailOrder`. `Borrador → Enviada → Recibida`. |
+| **OC** | Orden de compra a proveedor. Farmacia: `PurchaseOrder`; Tienda: `RetailOrder`. El contrato objetivo incorpora Parcialmente recibida entre Enviada y Recibida. |
 | **Bodega central / sala de ventas** | Las dos ubicaciones de stock de la tienda. Las compras entran a central; la venta descuenta de sala; la reposición transfiere central → sala. |
 | **Boleta vs factura** | **Factura** (`Invoice`, módulo clínico): líneas a precio **neto** + IVA 19 % calculado. **Boleta** (`Sale`, tienda): precios **con IVA incluido**; el IVA se desglosa. Ninguna es aún un DTE del SII. |
 | **Despacho (Shipment)** | Envío a domicilio de una venta de tienda. `Por preparar → Preparado → En ruta → Entregado`. |
@@ -100,7 +103,7 @@ Convenciones en el texto:
 
 ## 7. Verificación de consistencia
 
-Ejecutada al generar esta documentación (07-10-2026) con un script de comparación contra el código:
+Registro histórico al generar esta documentación (07-10-2026). Los resultados siguientes describen el prototipo de esa fecha; no certifican equivalencia del contrato objetivo actual con el código:
 
 | Chequeo | Código | Documentación | Resultado |
 |---|---|---|---|
@@ -118,4 +121,12 @@ Diferencias del prototipo (no de la documentación) que el dev debe conocer:
 - `ReferralStatus.Recibida`, `InvoiceStatus.Pagada`, `IdeaStatus` (salvo `En evaluación`), `ClinicStatus` y `AuditAction."Vio en vivo"` no tienen operación que los asigne.
 - Varias mutaciones sin `Guard` en la UI: `clinic.updateRoom`, `tasks.assign`, `tasks.complete`, `support.rate`, `support.vote`, `security.createEvent/updateEvent/addEventNote` (ver `permisos.md#3-operaciones-sin-permiso-explícito`).
 
-Para repetir la verificación cuando cambie el código: comparar los nombres de método de cada `interface *Service` de `contracts.ts` con la columna "Servicio.operación" de `api.md`, cada `export type X = "…" | …` de `src/domain` con `estados.md`, y `Permission` con `permisos.md`.
+### Diferencias explícitas del roadmap (2026-10-08)
+
+- El inventario numerado de api.md conserva las 96 operaciones del prototipo; sharing.respond, sharing.revoke y security.logAudit se marcan para retirar. Las rutas nuevas de red se documentan aparte como propuestas aún no implementadas en TypeScript ni Go.
+- Permission tiene 21 valores en código y 20 en el objetivo: se retiran red.aprobar/red.revocar y se agrega red.suspender. Admin objetivo: 20 permisos; Veterinario: 7; Recepción: 6; Farmacia: 8. red.suspender exige además rol Admin y origen.
+- RequestStatus objetivo sustituye Pendiente/Rechazada por Esperando dueño/Denegada y añade Expirada/Cancelada. GrantStatus añade Suspendido. Compras añade recepción parcial. Los demás catálogos conservan su inventario hasta el paquete correspondiente.
+- GET /me cambia su DTO a user/clinic/permissions. Consentimiento pasa de booleano/checkbox a evidencia por grant; auditoría se produce en servidor.
+- El roadmap especifica trabajo futuro. No se marcan pruebas de implementación como aprobadas por una revisión documental.
+
+Para repetir la verificación: comparar operaciones/rutas del inventario con frontend/src/services/contracts.ts, enums con estados.md y permisos con permisos.md. Registrar por separado equivalencias actuales y sustituciones objetivo, sin exigir una igualdad falsa durante la transición.

@@ -2,6 +2,8 @@
 
 Reglas que aplican a todos los dominios. Cada dominio las asume.
 
+> Autoridad: [DECISIONES.md](../DECISIONES.md). Las referencias a src/ describen el prototipo ubicado en frontend/src/. Contratos nuevos y gates en el [roadmap](../roadmap/README.md). El comportamiento demo no acredita implementación backend.
+
 ---
 
 ## 1. Multi-clínica (tenant)
@@ -10,71 +12,41 @@ Reglas que aplican a todos los dominios. Cada dominio las asume.
 2. **La clínica activa sale de la sesión**, nunca de un parámetro del cliente. Fuente: `src/services/contracts.ts` (cabecera: "El usuario que ejecuta la acción… lo resuelve el backend desde la sesión") y `src/lib/lookups.ts:currentClinic` (TODO: "reemplazar por la clínica de la sesión autenticada"). *(regla)*
 3. **Identificador estable de clínica.** El prototipo referencia clínicas por **nombre** (`Patient.clinic`, `Consultation.clinic`, `Exam.clinic`, `AccessRequest.from/to`, `AccessGrant.ownerClinic/grantedTo`, `Referral.destination`, `Idea.proposedBy`). El backend DEBE usar `clinicId` y exponer el nombre como dato de presentación. Fuente: `src/mocks/network.ts:clinics`. *(supuesto del prototipo → cambiar)*
 4. **Datos de alcance red (no tenant)**: catálogo de clínicas (`Clinic`), mascotas y dueños (accesibles según la regla de acceso, ver §2), ideas y votos de mejoras (tablero común de la red), releases/novedades (globales de VetData), series agregadas anónimas de analítica. *(regla)*
-5. **Dueños (Owner) se identifican por RUT** y hoy no tienen clínica asociada: un mismo dueño puede tener mascotas en varias clínicas (`src/components/network/network-search.tsx` agrupa mascotas del dueño por clínica). Cómo se modela la propiedad del dato del dueño (¿global con RUT? ¿por clínica?) es una decisión abierta → `preguntas-abiertas.md#p-03`.
+5. **Dueño global por RUT con vínculo por clínica**, conforme a p-03. Saldos y notas operativas se aíslan por clínica. La consulta pertenece a la clínica que la creó; origen es custodia de la ficha. El dueño autoriza compartir.
 6. **Errores de aislamiento**: acceder a un recurso de otra clínica devuelve `404` (no revelar existencia) salvo en los endpoints de red donde la UI necesita saber que existe (búsqueda por RUT/mascota para pedir acceso), donde se devuelve la **tarjeta mínima** (ver §2.6).
 
 ---
 
 ## 2. Red y compartición de fichas
 
-Fuente principal: `src/domain/sharing.ts` (comentario de cabecera, `grantStatus`, `accessLevel`), `src/lib/store.tsx` (`sendRequest`, `respondRequest`, `revokeGrant`, `useAccess`, `useCanView`, `usePendingRequest`), `src/services/mock/sharing.ts`.
+Contrato normativo de producto: p-03 a p-07 y p-10. Detalle de entidades, estados y rutas objetivo en [red-y-acceso](dominios/red-y-acceso.md).
 
-### 2.1 Las tres reglas del prototipo
-1. Cada mascota tiene una **clínica de origen** (`patient.clinic`) dueña del dato.
-2. Otra clínica solo ve la ficha si tiene un **acceso vigente**, que se obtiene solicitándolo a la clínica de origen (con consentimiento del dueño).
-3. Todo acceso tiene **alcance y vigencia**, y el origen puede **revocarlo**.
+### 2.1 Custodia y autorización
+La clínica de origen custodia; el dueño autoriza por mascota, alcance y vigencia. La consulta pertenece a la clínica autora. Se retira la aprobación por clínica del prototipo.
 
-### 2.2 Nivel de acceso (`accessLevel`)
-```
-si patient.clinicId == clínicaActual            → "propio"
-si existe grant g con g.patientId == patient.id
-   y g.grantedTo == clínicaActual
-   y grantStatus(g) == "Vigente"                → "compartido" (con g.scope)
-en otro caso                                    → "ninguno"
-```
-Fuente: `src/domain/sharing.ts:accessLevel`. El backend DEBE aplicar esta función en **cada** lectura de datos de mascota y de su historial (incluye listas, búsqueda, analítica local, tareas, mapa de boxes, agenda). *(regla)*
+### 2.2 Nivel de acceso
+Origen propio → propio; grant vigente de la clínica receptora → compartido con proyección; resto → ninguno. Aplicar en cada lectura, incluidas listas, tareas, búsqueda, agenda, boxes y analítica. Documentos propios se conservan al perder acceso a clínico ajeno.
 
-### 2.3 Estado del grant (`grantStatus`)
-```
-revoked == true                     → "Revocado"
-until != null y until < hoy         → "Vencido"   (el día `until` aún es vigente)
-en otro caso                        → "Vigente"
-```
-Fuente: `src/domain/sharing.ts:grantStatus`. Es un estado **derivado**: el backend lo calcula con la fecha del servidor en zona `America/Santiago` (ver §5); no se persiste "Vencido". *(regla)*
+### 2.3 Estado del grant
+Solo Vigente habilita lectura. Revocación de consentimiento, vencimiento y suspensión la impiden; restablecer suspensión no renueva ni revive consentimientos revocados. until es fecha civil inclusiva en America/Santiago. La propuesta de DTO incorpora Suspendido (ver dominio).
 
 ### 2.4 Alcance
-| Alcance | Qué ve la clínica receptora | Fuente |
-|---|---|---|
-| `Ficha completa` | Todo lo que ve la clínica de origen (identificación, alergias, condiciones, consultas, vacunas, exámenes, recetas). | `src/components/sharing/access-gate.tsx:AccessGate` |
-| `Resumen clínico` | Identificación (nombre, especie, raza, clínica de origen), **alergias, condiciones crónicas y vacunas**. Sin consultas, exámenes ni recetas. | `access-gate.tsx:PatientSummary`, `request-access-dialog.tsx` (texto "alergias, condiciones crónicas y vacunas"), `owners/owner-records.tsx` (excluye consultas en resumen) |
-
-**DEBE**: el recorte por alcance ocurre en el servidor (proyección del recurso), no en la UI. Hoy `patients.get` devuelve el `Patient` completo y la UI oculta. *(regla)*
+Ficha completa incluye el clínico autorizado. Resumen clínico: identificación, alergias, condiciones crónicas y vacunas; sin consultas, exámenes ni recetas en el JSON. Tarjeta sin acceso: mascota (nombre, especie, raza, origen) y dueño (nombre, sector), sin contacto. No basta ocultar secciones en UI.
 
 ### 2.5 Vigencia
-- Valores: `30 | 90 | null` (permanente). Fuente: `src/domain/sharing.ts:AccessDuration, DURATIONS`.
-- Al aprobar: `since = hoy`, `until = duration ? hoy + duration días : null`. Fuente: `src/services/mock/sharing.ts:respond`, `src/lib/store.tsx:respondRequest`. *(regla)*
-- La clínica de origen puede **ajustar alcance y vigencia** al aprobar (`RespondAccessRequestInput.terms`). Si no envía `terms`, se usan los solicitados. *(regla)*
-- Renovación: no existe operación; se hace con una nueva solicitud (semilla `q03` "Renovación de acceso", `src/mocks/sharing.ts`). → `preguntas-abiertas.md#p-05`.
+30/90 días o permanente. El dueño autoriza alcance igual o menor; nunca exceder lo solicitado. Renovación: nueva solicitud vinculada y nuevo consentimiento; aviso siete días antes. Documentar activación sin superposición antes de implementar renovación.
 
-### 2.6 Solicitud de acceso
-- Una solicitud **por mascota**; se ignoran mascotas propias y las que ya tienen una solicitud `Pendiente` de mi clínica. Fuente: `mock/sharing.ts:sendRequests`, `store.tsx:sendRequest`. *(regla)*
-- **DEBE** además: ignorar (o rechazar con 409) mascotas sobre las que ya existe un grant vigente; la UI solo ofrece pedir si `level == "ninguno"` (`access-gate.tsx:LockedRecord`).
-- Para poder pedir, la UI muestra una **tarjeta mínima** de mascotas ajenas (nombre, especie, raza, clínica de origen) buscando por RUT del dueño (`network/network-search.tsx`) y el dueño (nombre, RUT, sector). Definir exactamente qué campos son visibles sin acceso → `preguntas-abiertas.md#p-04`.
-- Valores por defecto del formulario: `SharingPolicy.defaultScope` y `defaultDuration` de **mi** clínica (`request-access-dialog.tsx`). Son solo defaults de UI.
+### 2.6 Solicitud
+Clínica B pide; dueño recibe email con token hasheado de un uso, expiración 72 h. Estados: Esperando dueño, Aprobada, Denegada, Expirada, Cancelada. Una pendiente por mascota/receptora; 409 si propia, duplicada o con grant vigente, salvo flujo explícito de renovación. No eludir una suspensión creando otro grant.
 
-### 2.7 Aprobación, consentimiento y política de la clínica
-- Solo la **clínica de origen** (`request.to`) responde, con permiso `red.aprobar`. Solo solicitudes `Pendiente` (mock: si no está pendiente devuelve la solicitud sin cambios; backend: **409**). *(regla)*
-- Consentimiento: `needsConsent = sharingPolicy.requireConsent && !owner.shareConsent` (política **de la clínica de origen**). Si `needsConsent`, la UI exige marcar "Confirmo que el dueño autorizó compartir estos datos (firma o SMS)". Fuente: `src/components/sharing/request-tabs.tsx:ApproveDialog`. *(regla)*
-- **Hallazgo**: esa confirmación **no viaja al backend** (`RespondAccessRequestInput` no tiene campo de consentimiento). **DEBE**: agregar `ownerConsent: { confirmed: boolean, method?: "firma" | "SMS" | ..., evidence? }` y rechazar (`422`) si se requiere y no viene; registrar quién lo confirmó y cuándo (auditoría). Ver `preguntas-abiertas.md#p-06`.
-- Rechazar no requiere consentimiento.
+### 2.7 Decisión y consentimiento
+El dueño verifica RUT y token, aprueba/deniega o reduce alcance. Token, evidencia (IP, timestamp, método email-link), solicitud y grant se confirman atómicamente. No hay excepción de consentimiento por SharingPolicy.requireConsent ni declaración por checkbox de clínica. El origen recibe notificación.
 
-### 2.8 Revocación
-- Solo la clínica de origen (`grant.ownerClinic`), permiso `red.revocar`, y solo grants `Vigente` (la UI muestra el botón solo si `status === "Vigente"`, `src/components/sharing/shared-tabs.tsx`). *(regla)*
-- Efecto inmediato: desde la revocación la receptora pasa a `ninguno`. Irreversible. *(regla)*
-- **DEBE**: invalidar cachés/sesiones de la receptora y notificarle (ver `eventos.md`).
+### 2.8 Revocación y suspensión
+El dueño revoca consentimiento; corta los grants correspondientes. Admin de origen con red.suspender puede suspender/restablecer por causa, con motivo, auditoría y aviso al dueño y receptora. Vet no aprueba ni suspende. Revocación/suspensión invalida cachés; toda nueva lectura reevalúa permisos.
 
-### 2.9 Auditoría de accesos de red
-El prototipo no registra quién de la clínica receptora abrió una ficha compartida. **DEBE** registrarse cada lectura de ficha con `level = compartido` (usuario, clínica, mascota, alcance, fecha-hora) y ponerse a disposición de la clínica de origen. → `preguntas-abiertas.md#p-07`.
+### 2.9 Auditoría
+Registrar usuario, clínica lectora, mascota, grant, alcance e instante antes de entregar clínico compartido. Visible para origen y dueño verificado. RUT no autentica; un token de decisión ya usado no autoriza consultas posteriores. Lecturas: 2–3 años, duración exacta pendiente; auditoría general: cinco años. Sin purga pendiente de política.
 
 ---
 
@@ -91,9 +63,9 @@ El prototipo no registra quién de la clínica receptora abrió una ficha compar
 
 ## 4. Autorización en servidor
 
-- Matriz `RolePermissions = Record<Role, Permission[]>` **configurable por clínica** (`src/domain/settings.ts`). Catálogo de 21 permisos fijo en el producto (`PERMISSIONS`).
+- Matriz `RolePermissions = Record<Role, Permission[]>` **configurable por clínica** (`src/domain/settings.ts`). Catálogo objetivo de 20 permisos: sustituir red.aprobar/red.revocar por red.suspender; el código conserva 21 hasta la migración de fases 2/5.
 - La UI usa `useCan()` (`src/lib/store.tsx`) y los componentes `Guard` / `RequirePermission` (`src/components/settings/guard.tsx`) que **solo deshabilitan u ocultan**. **DEBE**: cada endpoint valida `permiso ∈ rolePermissions[clínica][user.role]`; si no → `403`. Detalle por operación en `permisos.md`.
-- Hay autorizaciones que **no son un permiso** sino reglas de pertenencia: solo la clínica de origen aprueba/revoca; solo la clínica dueña del ticket responde; un admin no se cambia su propio rol ni se desactiva (`users-table.tsx`: oculta acciones si `u.id === currentUser.id`). *(regla)*
+- Hay autorizaciones que **no son un permiso** sino reglas de pertenencia: solo el dueño autoriza/revoca consentimiento, solo Admin de origen suspende/restablece; solo la clínica dueña del ticket responde; un admin no se cambia su propio rol ni se desactiva (`users-table.tsx`: oculta acciones si `u.id === currentUser.id`). *(regla)*
 - **Riesgo de auto-bloqueo**: `togglePermission` permite quitar `usuarios.administrar` al rol Admin. **DEBE** impedir que la clínica quede sin ningún usuario activo con `usuarios.administrar` (409). → `preguntas-abiertas.md#p-10`.
 - Lecturas: el contrato no asigna permisos a los `list/get`. Se proponen en `permisos.md` (p. ej. `invoices.list` y series de ingresos con `reportes.financiero`; auditoría con `seguridad.administrar`; cámaras con `seguridad.ver`).
 
@@ -144,12 +116,12 @@ Cada fila es **una** transacción: o se aplica todo o nada. Hoy los stores aplic
 |---|---|---|
 | `invoices.create` | asignar folio + crear factura + 1 `StockMovement` `Salida/Venta` por línea con `medicationId` + descontar stock (409 si insuficiente) | `mock/clinic.ts:invoices.create`, `store.tsx:addInvoice` |
 | `referrals.dispense` | 1 `StockMovement` `Salida/Dispensación` por ítem + descontar stock + `Referral.status = Dispensada` | `mock/clinic.ts:referrals.dispense`, `store.tsx:dispenseReferral` |
-| `pharmacy.receivePurchaseOrder` | 1 `StockMovement` `Entrada/Compra` por ítem + sumar stock + `status = Recibida`, `receivedAt` | `mock/pharmacy.ts`, `store.tsx:receivePurchaseOrder` |
+| `pharmacy.receivePurchaseOrder` | Recepción por cantidades + movimientos/lotes + stock + recibido acumulado + estado Parcialmente recibida/Recibida | p-24, Fase 3; amplía el mock |
 | `pharmacy.adjustStock` | movimiento `Ajuste` + stock | `mock/pharmacy.ts:recordMovements` |
 | `retail.checkout` | N° de boleta + `Sale` + `RetailMovement` `Salida/Venta` en **sala** por ítem + descontar stock sala + (si despacho) `Shipment` | `mock/retail.ts:checkout`, `retail-store.tsx:checkout` |
 | `retail.transferToSala` | movimiento `Transferencia` + `central −= qty`, `sala += qty` (409 si central insuficiente) | `mock/retail.ts:record` |
 | `retail.receiveOrder` | movimientos `Entrada/Compra` a **central** + `status = Recibida` | `mock/retail.ts:receiveOrder` |
-| `sharing.respond` (aprobar) | `request.status = Aprobada`, `respondedAt` + crear `AccessGrant` | `mock/sharing.ts:respond` |
+| Decisión del dueño (sustituye `sharing.respond`) | Consumir token + evidencia de consentimiento + solicitud Aprobada + grant + outbox | p-05/p-06; contrato objetivo de red |
 | `security.checkIn` | `AccessEntry` (Ingreso, Cliente) + `WaitingEntry` | `mock/security.ts:checkIn` |
 | `security.callFromWaiting` | `Room` → `ocupado` con doctor/paciente de la cita + quitar `WaitingEntry` | `mock/security.ts:callFromWaiting`; el store solo actualiza el mapa local con `sync:false` (`security-store.tsx`) |
 | `support.proposeIdea` | `Idea` (votes = 1, votedByMe) + `Ticket` categoría `Mejora` prioridad `Baja` vinculado (`ideaId`) | `mock/support.ts:proposeIdea` |
@@ -176,19 +148,19 @@ Correlativos (folio, N° de boleta, N° de OC, N° de ticket) se asignan dentro 
 | Abrir grabación | `logAudit("Abrió grabación", "Revisión de las HH:mm")` desde el cliente | El servidor registra al **entregar** el segmento (no depender del POST del cliente); permiso `seguridad.grabaciones`. | `camera-dialog.tsx` |
 | Exportar clip | `logAudit("Exportó clip", …)` | Ídem; además guardar rango, cámara, hash del archivo exportado. | `camera-dialog.tsx`, `security/events.tsx` |
 | Accesos de red a fichas compartidas | No existe | Registrar lecturas con nivel `compartido` (ver §2.9). | — |
-| Aprobación con consentimiento declarado | No existe | Registrar quién declaró el consentimiento y el medio. | `request-tabs.tsx` |
+| Consentimiento autorizado por dueño | El prototipo usa checkbox de clínica, a retirar | Evidencia por grant: dueño verificado, token hash, IP, instante y método email-link | p-05/p-06 |
 | Cambios de permisos, roles, estado de usuarios, política de compartición, ajustes de seguridad, alarma, cerraduras | No existe | Registro de auditoría administrativa (quién, qué, antes/después). | `mock/settings.ts`, `mock/security.ts` |
 | Movimientos de inventario | `user` = nombre del actor | Guardar `userId` (no nombre) y `ref` al documento origen (folio, OC, derivación) como relación, no texto. | `domain/pharmacy.ts:StockMovement`, `domain/retail.ts:RetailMovement` |
 
 - `AuditEntry` es **append-only**: sin update ni delete. `user` y `role` los pone el servidor (`mock/security.ts:logAudit`). El listado de auditoría solo con `seguridad.administrar` (`components/security/devices.tsx` `RequirePermission`).
-- Retención de auditoría independiente de la retención de video (`SecuritySettings.retentionDays`). → `preguntas-abiertas.md#p-19`.
+- Retención: auditoría administrativa/general cinco años (p-19); lecturas compartidas dos a tres años, exacto por validar (p-07/D-01); video treinta días predeterminado. No ejecutar purgas sin política aprobada para la categoría.
 
 ---
 
 ## 11. Datos personales y privacidad
 
 - Datos personales en juego: dueños (RUT, nombre, email, teléfonos, dirección, fecha de nacimiento, contacto de emergencia, saldo), usuarios (email), video con personas, accesos al hall con nombre.
-- El consentimiento de compartir (`Owner.shareConsent`) es un dato con valor legal: necesita fecha, medio y evidencia, y debe poder revocarse. → `preguntas-abiertas.md#p-06`.
+- Owner.shareConsent es una simplificación demo. La autorización real es evidencia por grant y dueño verificado, con revocación y trazabilidad conforme a p-06.
 - Las series de red son agregados anónimos (`src/domain/metrics.ts`, cabecera). **DEBE**: aplicar umbral mínimo de conteo (k-anonimato) antes de publicar agregados por sector/categoría. → `preguntas-abiertas.md#p-21`.
 - Retención y borrado de datos personales → `preguntas-abiertas.md#p-14`.
 

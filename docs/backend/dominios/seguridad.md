@@ -1,5 +1,8 @@
 # Seguridad (cámaras, privacidad de boxes, grabaciones, dispositivos, alarma, eventos, auditoría)
 
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-26: ver/anotar eventos abiertos con seguridad.ver, cerrar con seguridad.administrar y cerrado inmutable. p-19/T4-2: auditoría generada por servidor; retirar security.logAudit como escritura pública. Video real queda en Fase 8. Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+
+
 > Fuentes: `src/domain/security.ts` (reglas 1–3 en cabecera, `ZONES`, `WAITING_CAPACITY`, `OPEN_EVENT`, `SEVERITIES`) · `src/services/contracts.ts` (`SecurityService`) · `src/services/mock/security.ts` · `src/lib/security-store.tsx` (`usePrivacy`) · `src/components/security/*` (`camera-dialog.tsx`, `events.tsx`, `devices.tsx`, `zones.tsx`, `monitoring.tsx`, `page-shell.tsx`)
 
 > Llegadas al hall y sala de espera (`listAccess`, `listWaiting`, `checkIn`, `callFromWaiting`) se documentan en [agenda-y-atencion](agenda-y-atencion.md) aunque vivan en `SecurityService`.

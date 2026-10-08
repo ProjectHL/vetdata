@@ -1,5 +1,8 @@
 # Soporte (tickets a VetData, mejoras/ideas, novedades)
 
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-18: Staff VetData fuera del tenant y SLA en horas corridas. La simulación de respuesta del prototipo no es una operación de producción. Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+
+
 > Fuentes: `src/domain/support.ts` (`SLA_HOURS`, `TICKET_FLOW`, `OPEN_STATUSES`, `slaState`, `IDEA_FLOW`) · `src/services/contracts.ts` (`SupportService`) · `src/services/mock/support.ts` · `src/lib/support-store.tsx` · `src/lib/metrics/support.ts` · `src/components/support/*`
 
 ## Propósito

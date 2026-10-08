@@ -1,5 +1,8 @@
 # Preguntas abiertas y simulaciones del prototipo
 
+> **Registro histórico del prototipo.** Estas preguntas no reabren decisiones ya cerradas. Consultar [DECISIONES.md](../DECISIONES.md) para p-NN y [roadmap](../roadmap/README.md#decisiones-y-dependencias-diferidas) para dependencias actuales. Aprobación por clínica, IVA, fechas y recepción parcial descritos abajo pueden reflejar el estado demo anterior.
+
+
 > Todo lo que el prototipo **simula**, **fija** o **no resuelve**. Cada ítem tiene un id estable (`#p-NN`) referenciado desde el resto de la documentación. "Decide" = quién debería resolverlo (Negocio / Legal / Dev).
 
 ## A. Identidad, tenants y acceso

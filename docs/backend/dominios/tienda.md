@@ -1,5 +1,8 @@
 # Tienda (productos, punto de venta, bodega, compras, despachos)
 
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. Precios persistidos netos y presentación bruta según p-17. Reutilizar recepción por cantidades/lotes de Fase 3; el flujo de recepción total del mock no limita el backend. Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+
+
 > Fuentes: `src/domain/retail.ts` (`deliveryFee`, `ivaIncluded`, `totalStock`, `stockLevel`, `margin`, `SHIPMENT_FLOW`, `LOCATIONS`, `COURIERS`) · `src/services/contracts.ts` (`RetailService`) · `src/services/mock/retail.ts` · `src/lib/retail-store.tsx` · `src/lib/metrics/retail.ts` · `src/components/retail/*`
 
 ## Propósito

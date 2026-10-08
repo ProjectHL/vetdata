@@ -47,25 +47,32 @@ disponible ──asignar/pasar a box──► ocupado ──finalizar atención�
 Efecto: `ocupado` + `privacyInBoxes` ⇒ cámara del room en privacidad (`security-store.tsx:usePrivacy`). Registrar historial de estados con timestamp (requerido por `analytics.boxOccupancy`).
 
 ### Solicitud de acceso
-`RequestStatus = "Pendiente" | "Aprobada" | "Rechazada"` — `src/domain/sharing.ts`
 
-| De → A | Operación | Quién | UI hoy | Backend DEBE |
-|---|---|---|---|---|
-| ∅ → Pendiente | `sharing.sendRequests` | `red.solicitar`, clínica solicitante | Solo mascotas ajenas sin solicitud pendiente | Ídem + sin grant vigente |
-| Pendiente → Aprobada | `sharing.respond {approve:true, terms?}` | `red.aprobar` **y** clínica de origen (`to`) | Consentimiento exigido según política (checkbox local) | Validar clínica de origen; exigir y registrar consentimiento (422); crear grant atómicamente |
-| Pendiente → Rechazada | `sharing.respond {approve:false}` | ídem | — | Validar clínica de origen |
-| Aprobada/Rechazada → * | — | — | El store ignora; mock devuelve sin cambios | **409** |
-No existen: cancelar (solicitante), expirar pendientes. → `preguntas-abiertas.md#p-05`.
+Contrato objetivo p-05/p-06: `Esperando dueño → Aprobada | Denegada | Expirada | Cancelada`. El enum actual del prototipo Pendiente/Aprobada/Rechazada debe migrarse en fases 2/5.
+
+| Transición | Actor | Restricción |
+|---|---|---|
+| Crear → Esperando dueño | Solicitante con red.solicitar | Mascota ajena; sin solicitud pendiente ni grant vigente salvo renovación explícita; token 72 h |
+| Esperando dueño → Aprobada | Dueño verificado | Token/RUT; alcance igual o menor; evidencia + token consumido + grant atómicos |
+| Esperando dueño → Denegada | Dueño verificado | Token válido; consumido al decidir |
+| Esperando dueño → Expirada | Sistema/validación de tiempo | Más de 72 h; no depender solo del job para impedir respuesta |
+| Esperando dueño → Cancelada | Clínica solicitante con red.solicitar | Invalida token |
+| Terminal → otra respuesta | Nadie | 409; renovar crea solicitud vinculada |
 
 ### Acceso / grant
-`GrantStatus = "Vigente" | "Vencido" | "Revocado"` — **derivado** de `revoked` y `until` (`src/domain/sharing.ts:grantStatus`)
 
-| De → A | Disparador | Quién | UI hoy | Backend DEBE |
-|---|---|---|---|---|
-| ∅ → Vigente | aprobación | clínica de origen | — | `since = hoy`, `until = hoy + duration` o `null` |
-| Vigente → Vencido | tiempo (`until < hoy`) | sistema | Calculado con `TODAY` fijo | Calcular con fecha del servidor (America/Santiago); emitir evento `AccesoVencido` (job diario) |
-| Vigente → Revocado | `sharing.revoke` | `red.revocar` **y** clínica de origen | Botón solo si `Vigente` y es otorgado por mí (`shared-tabs.tsx`) | Validar origen y `Vigente` (409); `revokedAt/By` |
-| Vencido/Revocado → Vigente | — | — | No existe | No permitido (nueva solicitud) |
+Solo Vigente habilita acceso compartido. Propuesta de estado derivado: Revocado > Vencido > Suspendido > Vigente; hasta until inclusive en America/Santiago.
+
+| Cambio | Actor | Efecto |
+|---|---|---|
+| Crear grant | Dueño aprueba | Consentimiento por grant, alcance y vigencia autorizados |
+| Vigente → Vencido | Tiempo | Denegar nuevas lecturas; conservar documentos propios |
+| Revocar consentimiento | Dueño verificado | Revocar grants correspondientes e invalidar acceso |
+| Suspender | Admin origen con red.suspender | Motivo, auditoría y aviso a dueño/receptora |
+| Restablecer | Admin origen con red.suspender | Quitar suspensión; no alterar vencimiento ni revocación |
+| Renovar | Solicitante y nueva decisión del dueño | Nueva solicitud/grant vinculados; no reactivar implícitamente el anterior |
+
+Ver [red-y-acceso](dominios/red-y-acceso.md) para contrato y autorización temporal del dueño.
 
 ### Receta / derivación (Referral)
 `ReferralStatus = "Enviada" | "Recibida" | "Dispensada"` — `src/domain/referrals.ts`
@@ -85,7 +92,7 @@ No existen: cancelar (solicitante), expirar pendientes. → `preguntas-abiertas.
 | ∅ → Borrador | `pharmacy.createPurchaseOrder` | `farmacia.inventario` | Desde sugerencia de reposición | `unitCost` del servidor |
 | Borrador → Enviada | `pharmacy.sendPurchaseOrder` | `farmacia.inventario` | Botón en borradores | 409 si no `Borrador` (mock devuelve sin cambios) |
 | Enviada → Recibida | `pharmacy.receivePurchaseOrder` | `farmacia.inventario` | Botón / acción rápida en Pendientes | Atómico con entradas de stock; 409 si no `Enviada` |
-No existen: editar borrador, cancelar, recepción parcial.
+El prototipo no tiene recepción parcial. El contrato objetivo p-24 la agrega en Fase 3: Enviada → Parcialmente recibida → Recibida, registrando cantidades acumuladas, pendientes, lotes y costo real por entrega. No cerrar ni repetir cantidades ya recibidas. Edición/cancelación adicional se especifica antes de implementarla.
 
 ### Orden de compra de tienda
 `RetailOrderStatus = "Borrador" | "Enviada" | "Recibida"` — `src/domain/retail.ts`. Mismas transiciones que farmacia con permiso `tienda.compras`; recibir hace entradas a **bodega central**. Fuente: `mock/retail.ts:sendOrder, receiveOrder`.
@@ -131,9 +138,9 @@ Votos: `support.vote` (toggle por clínica) — recomendado bloquear en `Lanzada
 |---|---|---|---|---|
 | ∅ → Nuevo | `security.createEvent` / dispositivos | `seguridad.ver` (propuesto) / sistema | Manual desde cámara o Eventos | — |
 | Nuevo → En revisión | `security.updateEvent {assignee}` o `{status}` | `seguridad.ver` (propuesto) | Asignar responsable desde `Nuevo` pasa a `En revisión` | — |
-| Nuevo/En revisión → Resuelto | `security.updateEvent` | ídem | "Resolver" | `resolvedAt = ahora` |
-| Nuevo/En revisión → Falsa alarma | `security.updateEvent` | ídem | "Falsa alarma" | `resolvedAt = ahora` |
-| Resuelto/Falsa alarma → Nuevo/En revisión | `security.updateEvent` | — | **El select lo permite**; `resolvedAt` queda con el valor anterior | Definir si se permite reabrir; si sí, limpiar `resolvedAt` y auditar |
+| Nuevo/En revisión → Resuelto | `security.updateEvent` | `seguridad.administrar` | "Resolver" | `resolvedAt = ahora`, cierre inmutable (p-26) |
+| Nuevo/En revisión → Falsa alarma | `security.updateEvent` | `seguridad.administrar` | "Falsa alarma" | `resolvedAt = ahora`, cierre inmutable (p-26) |
+| Resuelto/Falsa alarma → Nuevo/En revisión | `security.updateEvent` | — | **El select lo permite**; `resolvedAt` queda con el valor anterior | Rechazar 409 según p-26; evento nuevo vinculado si reaparece; no editar ni agregar notas al cerrado |
 
 ### Factura
 `InvoiceStatus = "Emitida" | "Pagada"` — `src/domain/invoices.ts`
@@ -180,7 +187,7 @@ No existen: anulación, nota de crédito, pago parcial.
 
 | Enum | Valores | Regla | Fuente |
 |---|---|---|---|
-| `GrantStatus` | Vigente, Vencido, Revocado | ver arriba | `domain/sharing.ts:grantStatus` |
+| `GrantStatus` objetivo | Vigente, Vencido, Revocado, Suspendido | ver arriba | `domain/sharing.ts:grantStatus` |
 | `AccessLevel` | propio, compartido, ninguno | origen = mi clínica → propio; grant vigente → compartido | `domain/sharing.ts:accessLevel` |
 | `AppointmentStage` | Por llegar, En espera, En box, Realizada, Cancelada, No asistió | estado terminal; en espera si `WaitingEntry`; en box si hoy, ≤ 60 min y paciente en box ocupado | `lib/metrics/day.ts:appointmentStage` |
 | `StockStatus` | Disponible, Stock bajo, Sin stock | 0 → Sin stock; < min → Stock bajo | `domain/medications.ts:stockStatus` |
@@ -231,9 +238,12 @@ No existen: anulación, nota de crédito, pago parcial.
 | `TicketMessage.side` | Clínica, VetData | `domain/support.ts` | `VetData` solo desde backoffice |
 | `Release.items[].type` | Nuevo, Mejora, Corrección | `domain/support.ts` | |
 | `Role` | Admin, Veterinario, Recepción, Farmacia | `domain/settings.ts` | Fijos; ver `permisos.md` |
-| `Permission` | 21 valores | `domain/settings.ts` | Ver `permisos.md` |
+| `Permission` | 21 actuales / 20 objetivo | `domain/settings.ts` | Sustituir red.aprobar/red.revocar por red.suspender; ver `permisos.md` |
 
 ---
 
-## Cobertura
+## Cobertura y diferencias objetivo
+
+Los estados adicionales de red y compras son contratos objetivo aún ausentes de los tipos del prototipo. La cobertura siguiente describe el inventario anterior a su migración; no prueba equivalencia con la API futura.
+
 Las 50 uniones de string declaradas con `export type` en `src/domain/*` y `src/lib/*` (incluida `Permission`, detallada en `permisos.md`) y las 9 uniones inline de campos (`Patient.sex`, `Owner.preferredContact`, `Camera.recording`, `Camera.resolution`, `Device.status`, `AccessEntry.direction`, `TicketMessage.side`, `Release.items[].type`, `SecuritySettings.retentionDays`) aparecen en este documento con todos sus valores. Ver la verificación en `README.md#7-verificación-de-consistencia`.

@@ -2,7 +2,7 @@
 
 > Fuentes: `src/domain/settings.ts` (`Permission`, `PERMISSIONS`, `Role`, `ROLES`, `RolePermissions`) · `src/mocks/settings.ts:defaultRolePermissions` · `src/lib/store.tsx:useCan` · `src/components/settings/guard.tsx` (`Guard`, `RequirePermission`) · usos de `Guard`/`RequirePermission`/`can(...)` en `src/components/**` y `src/app/**`.
 >
-> - El catálogo de 21 permisos es **fijo del producto**; la matriz rol → permisos es **configurable por clínica** (`settings.togglePermission`).
+> - El prototipo tiene 21 permisos; el catálogo objetivo tiene 20 al sustituir red.aprobar/red.revocar por red.suspender según p-10; la matriz rol → permisos es **configurable por clínica** (`settings.togglePermission`).
 > - La UI **solo** deshabilita (`Guard`, tooltip "Rol X sin permiso: …") u oculta (`RequirePermission`). **El backend debe validar cada permiso** (403).
 > - "*(propuesto)*" = el contrato no declara permiso; se infiere de la UI o se recomienda.
 
@@ -18,8 +18,7 @@
 | `farmacia.dispensar` | Farmacia | ✔ | | | ✔ |
 | `farmacia.inventario` | Farmacia | ✔ | | | ✔ |
 | `red.solicitar` | Red | ✔ | ✔ | ✔ | |
-| `red.aprobar` | Red | ✔ | ✔ | | |
-| `red.revocar` | Red | ✔ | | | |
+| `red.suspender` | Red | ✔ | | | |
 | `tienda.vender` | Tienda | ✔ | | ✔ | ✔ |
 | `tienda.inventario` | Tienda | ✔ | | | ✔ |
 | `tienda.compras` | Tienda | ✔ | | | ✔ |
@@ -32,7 +31,7 @@
 | `reportes.financiero` | Administración | ✔ | | | |
 | `usuarios.administrar` | Administración | ✔ | | | |
 
-Fuente: `src/mocks/settings.ts:defaultRolePermissions` (`Admin: all`).
+Fuente base: `src/mocks/settings.ts:defaultRolePermissions` (`Admin: all`), con cambio objetivo p-10 aplicado aquí. Código, mocks y seeds aún requieren migración. red.suspender exige además rol Admin y clínica de origen; no delegable a otro rol mediante la matriz.
 
 ## 2. Permiso → operaciones que habilita
 
@@ -46,8 +45,7 @@ Fuente: `src/mocks/settings.ts:defaultRolePermissions` (`Admin: all`).
 | `farmacia.dispensar` | Entregar medicamentos derivados a farmacia interna. | `referrals.dispense`; *(propuesto)* `pharmacy.listMovements`, `referrals.list` | `pharmacy/dispense-queue.tsx`; tarea `receta:*` |
 | `farmacia.inventario` | Ajustes de stock y órdenes de compra. | `pharmacy.adjustStock`, `pharmacy.createPurchaseOrder`, `pharmacy.sendPurchaseOrder`, `pharmacy.receivePurchaseOrder`; *(propuesto)* `pharmacy.listPurchaseOrders`, `pharmacy.listMovements` | `pharmacy/medication-table.tsx`, `pharmacy/purchasing.tsx`; tareas `stockmed:*`, `ocfar:*` |
 | `red.solicitar` | Pedir fichas a otras clínicas de la red. | `sharing.sendRequests` | `sharing/access-gate.tsx`, `network/network-search.tsx`, `owners/owner-pets.tsx` |
-| `red.aprobar` | Compartir fichas propias con otras clínicas. | `sharing.respond` (además: ser clínica de origen) | `sharing/request-tabs.tsx`, `dashboard/my-day/vet.tsx`; tarea `solicitud:*` |
-| `red.revocar` | Quitar accesos otorgados a otras clínicas. | `sharing.revoke` (además: ser clínica de origen) | `sharing/shared-tabs.tsx` |
+| `red.suspender` | Suspender/restablecer acceso por causa. | sharing.suspendGrant / sharing.restoreGrant | UI pendiente en Fase 5; Admin origen, motivo y auditoría obligatorios |
 | `tienda.vender` | Usar el punto de venta y emitir boletas. | `retail.checkout`; *(propuesto)* `retail.listSales` | `retail/pos.tsx`, `command-palette.tsx` |
 | `tienda.inventario` | Reponer sala, ajustes y despachos. | `retail.transferToSala`, `retail.adjust`, `retail.advanceShipment`; *(propuesto)* `retail.listMovements`, `retail.listShipments` | `retail/warehouse.tsx`, `retail/shipments.tsx`; tareas `despacho:*`, `sala:*` |
 | `tienda.compras` | Órdenes de compra a proveedores de productos. | `retail.createOrder`, `retail.sendOrder`, `retail.receiveOrder`; *(propuesto)* `retail.listOrders` | `retail/purchasing.tsx`; tarea `octda:*` |
@@ -70,8 +68,8 @@ Fuente: `src/mocks/settings.ts:defaultRolePermissions` (`Admin: all`).
 | `tasks.assign`, `tasks.complete` | Sin guard (`tasks/task-inbox.tsx`); la tarea solo es visible si se tiene su permiso | Exigir el permiso de la tarea (tabla en `dominios/agenda-y-atencion.md`) |
 | `support.rate` | Sin guard (`ticket-detail.tsx`) | `soporte.crear` + ser dueño del ticket |
 | `support.vote` | Sin guard (`ideas-board.tsx`) | `soporte.crear` |
-| `security.updateEvent`, `security.addEventNote`, `security.createEvent` | Solo protegidos por `seguridad.ver` de la sección | `seguridad.ver` (¿cerrar como `Falsa alarma` requiere `seguridad.administrar`? → `preguntas-abiertas.md#p-26`) |
-| `security.logAudit` | Implícito en la acción auditada | Según acción (ver tabla §2); idealmente generado por el servidor |
+| `security.updateEvent`, `security.addEventNote`, `security.createEvent` | Solo protegidos por `seguridad.ver` de la sección | `seguridad.ver` para ver/anotar abiertos; cerrar exige `seguridad.administrar`; cerrado inmutable (p-26) |
+| `security.logAudit` | Implícito en la acción auditada | Retirar POST de auditoría del cliente; registro obligatorio generado por servidor al ejecutar la acción |
 
 ### 3.2 Lecturas sin permiso (basta sesión + tenant + regla de red)
 `patients.list`, `patients.get`, `patients.listByOwner`, `owners.list`, `owners.get`, `clinic.listDoctors`, `clinic.listRooms`, `clinic.listServices`, `appointments.list`, `referrals.list`, `network.getCurrentClinic`, `network.listClinics`, `sharing.listRequests`, `sharing.listGrants`, `pharmacy.listMedications`, `pharmacy.listSuppliers`, `retail.listProducts`, `retail.listSuppliers`, `support.listIdeas`, `support.listReleases`, `security.listWaiting`, `settings.getCurrentUser`, `settings.listUsers`, `settings.getRolePermissions`, `settings.getClinicProfile`, `settings.getSharingPolicy`, `tasks.listMeta`, `tasks.listReminders`, `analytics.monthlyConsults`, `analytics.vaccineCoverage`, `analytics.coverageByVaccine`, `analytics.diagnosisCategories`, `analytics.networkAlerts`.
@@ -84,13 +82,13 @@ Lecturas con permiso propuesto (contienen datos sensibles o financieros): `invoi
 
 ## 4. Reglas de autorización que no son permisos
 1. **Tenant**: todo recurso se filtra por la clínica de la sesión.
-2. **Red**: `sharing.respond`/`sharing.revoke` solo por la clínica de origen; lecturas de mascotas según `accessLevel` y alcance.
+2. **Red**: el dueño autoriza/revoca consentimiento mediante verificación propia; Admin de origen con red.suspender suspende/restablece; lecturas según nivel y alcance. Sesión de clínica no sustituye identidad del dueño.
 3. **Auto-gestión**: un usuario no cambia su propio rol ni estado (`users-table.tsx`).
 4. **Último administrador**: no dejar la clínica sin usuario activo con `usuarios.administrar` (toggle de matriz o desactivación). Riesgo real: hoy se puede quitar `usuarios.administrar` al rol Admin con un clic.
 5. **Propiedad del ticket**: sin `soporte.administrar` solo tickets propios.
 
 ## 5. Observaciones sobre la matriz por defecto
-- Veterinario puede **aprobar** solicitudes de red pero no **revocar** (`red.revocar` solo Admin). Confirmar si es intencional. → `#p-10`.
+- Veterinario solicita pero no aprueba ni suspende. El dueño autoriza; red.suspender es exclusivo de Admin origen (p-10). red.aprobar/red.revocar son permisos del prototipo a retirar.
 - Recepción tiene `red.solicitar` pero no `ficha.ver`: puede pedir fichas que luego no verá en detalle clínico.
 - Farmacia tiene `facturas.emitir` y `tienda.*` pero no `ficha.ver`; dispensa recetas viendo solo el nombre de la mascota.
 - Solo Admin ve cámaras de boxes, grabaciones y finanzas.

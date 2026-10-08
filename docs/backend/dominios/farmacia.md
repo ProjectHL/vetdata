@@ -1,5 +1,8 @@
 # Farmacia (inventario de medicamentos, derivaciones/recetas, compras)
 
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-24 exige recepción parcial desde Fase 3, lotes y costo real proveedor; el cálculo COST_RATIO del prototipo debe retirarse. Bandeja de derivaciones recibidas pendiente D-02. Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+
+
 > Fuentes: `src/domain/medications.ts` (`stockStatus`, `expiryStatus`, `EXPIRY_WARNING_DAYS`) · `src/domain/pharmacy.ts` (`COST_RATIO`) · `src/domain/referrals.ts` (`INTERNAL_PHARMACY`) · `src/services/contracts.ts` (`PharmacyService`, `ReferralsService`) · `src/services/mock/pharmacy.ts` (`recordMovements`) · `src/services/mock/clinic.ts:referrals` · `src/lib/store.tsx` (farmacia) · `src/lib/metrics/pharmacy.ts` · `src/components/pharmacy/*` · `src/components/care-actions/referral-form.tsx`
 
 ## Propósito
@@ -76,7 +79,7 @@ Append-only (no se edita ni borra; se corrige con otro ajuste).
 8. **OC farmacia**: crear en `Borrador` con `unitCost = round(Medication.price × COST_RATIO)`, `COST_RATIO = 0,55`. Fuente: `mock/pharmacy.ts:createPurchaseOrder`, `src/domain/pharmacy.ts:COST_RATIO`. *(supuesto del prototipo: costo estimado como 55 % del precio de venta; en producción debe venir de la lista de precios del proveedor o del último costo)*.
 9. **Sugerencia de reposición**: medicamentos no `Disponible` sin OC abierta (`status != Recibida`), agrupados por proveedor habitual, cantidad sugerida `max(0, 2·minStock − stock)`. Fuente: `src/components/pharmacy/purchasing.tsx:suggestedQty`. *(regla de UI; candidata a endpoint calculado)*.
 10. **Enviar OC**: solo `Borrador → Enviada`. Fuente: `mock/pharmacy.ts:sendPurchaseOrder`. *(regla)* → 409 en otro estado.
-11. **Recibir OC**: solo `Enviada → Recibida`; `Entrada/Compra` por ítem (`ref = "OC <n>"`), `receivedAt = hoy`. Fuente: `mock/pharmacy.ts:receivePurchaseOrder`, `store.tsx:receivePurchaseOrder`. *(regla)* — recepción total; no hay recepción parcial ni actualización de lote/vencimiento al recibir (`#p-24`).
+11. **Recibir OC**: solo `Enviada → Recibida`; `Entrada/Compra` por ítem (`ref = "OC <n>"`), `receivedAt = hoy`. Fuente: `mock/pharmacy.ts:receivePurchaseOrder`, `store.tsx:receivePurchaseOrder`. *(supuesto del prototipo, sustituido por p-24)* — contrato objetivo con recepción parcial, cantidades acumuladas/pendientes y lote/vencimiento por entrega en Fase 3.
 12. **Venta por factura** descuenta stock (ver [facturacion](facturacion.md)). *(regla)*
 13. **Valor por vencer** = Σ stock × round(price × COST_RATIO) de medicamentos `vencido`/`por vencer` con stock. Fuente: `src/lib/metrics/pharmacy.ts:expiringValue`. *(métrica)*
 

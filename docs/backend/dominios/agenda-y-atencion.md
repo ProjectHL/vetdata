@@ -1,5 +1,8 @@
 # Agenda y atención (citas, boxes, sala de espera, llegadas, tareas y recordatorios)
 
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-05/p-06/p-10 sustituyen las tareas de aprobación por clínica por seguimiento de solicitudes al dueño; p-15 exige horarios reales y configurables. La bandeja se calcula en servidor (p-23). Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+
+
 > Fuentes: `src/domain/appointments.ts` · `src/domain/clinic.ts` · `src/domain/security.ts` (`AccessEntry`, `WaitingEntry`, `WAITING_CAPACITY`) · `src/domain/tasks.ts` · `src/services/contracts.ts` (`AppointmentsService`, `ClinicService` [doctores, rooms], `SecurityService` [access, waiting, checkIn, callFromWaiting], `TasksService`) · `src/lib/store.tsx` · `src/lib/security-store.tsx` · `src/lib/tasks.ts` · `src/lib/metrics/day.ts` · `src/components/agenda/agenda.tsx` · `src/components/activity/clinic-activity.tsx` · `src/components/dashboard/my-day/*`
 
 ## Propósito
@@ -96,7 +99,7 @@ Unicidad: (`doctorId`, `date`, `time`) entre citas **no canceladas**. Fuente: `c
 | `llegada:<apptId>` | Clínica | Llegada esperada de hoy | Media | `agenda.gestionar` | `security.checkIn` |
 | `vacuna:<patientId>` | Clínica | Mascota visible con vacuna vencida y sin recordatorio | Media | `agenda.gestionar` | `tasks.sendReminder` |
 | `factura:<invoiceId>` | Clínica | Factura `Emitida` (impaga) | Baja | `facturas.emitir` | — |
-| `solicitud:<reqId>` | Red | Solicitud recibida `Pendiente` | Alta si ≥ 1 día, si no Media | `red.aprobar` | — |
+| `solicitud:<reqId>` (prototipo; sustituir) | Red | Seguimiento de solicitud Esperando dueño, no aprobación por clínica | Según vencimiento/entrega, definir en T2-8 | `red.solicitar` para solicitante | No permite decidir en nombre del dueño |
 | `receta:<refId>` | Farmacia | Derivación a farmacia interna no dispensada | Alta | `farmacia.dispensar` | `referrals.dispense` (si hay stock) |
 | `stockmed:<medId>` | Farmacia | Stock bajo/sin stock y sin OC abierta | Alta si 0, si no Media | `farmacia.inventario` | — |
 | `ocfar:<poId>` | Farmacia | OC farmacia `Enviada` | Baja | `farmacia.inventario` | `pharmacy.receivePurchaseOrder` |

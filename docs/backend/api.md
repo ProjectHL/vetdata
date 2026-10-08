@@ -1,6 +1,8 @@
-# API: todas las operaciones de `src/services/contracts.ts`
+# API: inventario del prototipo y contrato objetivo
 
 > 96 operaciones en 15 servicios. Ruta y método = JSDoc del contrato (idénticos al esqueleto `src/services/http/*`). Permiso: el contrato **no** declara permisos; "*(propuesto)*" = inferido de la UI o recomendado. `sesión` = basta usuario autenticado de la clínica (siempre con aislamiento por tenant y regla de acceso de red). Prefijo común `/api/v1`. Detalle de entradas/salidas/errores en cada `dominios/*.md`.
+
+**Estado:** las 96 operaciones de las tablas numeradas son el inventario del prototipo (frontend/src/), no la cobertura de la API Go. Las sustituciones de red se indican abajo. El contrato objetivo añade operaciones y no conserva el total de 96; su implementación se sigue en el [roadmap](../roadmap/README.md).
 
 Convenciones: `:id` = id del servidor; `:rut` = RUT normalizado `12345678-9`; `:taskId` = `fuente:id` (URL-encode); `:role` contiene tildes (`Recepción`) → usar ids ASCII o URL-encode.
 
@@ -14,8 +16,12 @@ Convenciones: `:id` = id del servidor; `:rut` = RUT normalizado `12345678-9`; `:
 | 20 | `sharing.listRequests` | GET | `/api/v1/sharing/requests` | sesión | Solo donde mi clínica es from/to |
 | 21 | `sharing.listGrants` | GET | `/api/v1/sharing/grants` | sesión | Incluir estado derivado |
 | 22 | `sharing.sendRequests` | POST | `/api/v1/sharing/requests` | `red.solicitar` | una solicitud por mascota de otra clínica sin solicitud pendiente |
-| 23 | `sharing.respond` | POST | `/api/v1/sharing/requests/:id/response` | `red.aprobar` + ser clínica de origen | si aprueba, crea el acceso; Atómico solicitud+grant; consentimiento |
-| 24 | `sharing.revoke` | POST | `/api/v1/sharing/grants/:id/revoke` | `red.revocar` + ser clínica de origen | Solo grants vigentes |
+| 23 | `sharing.respond` (solo prototipo; retirar) | POST | `/api/v1/sharing/requests/:id/response` | Sin autorización válida en contrato objetivo | Sustituir por decisión del dueño; ver rutas objetivo de red |
+| 24 | `sharing.revoke` (solo prototipo; retirar) | POST | `/api/v1/sharing/grants/:id/revoke` | Sin autorización válida en contrato objetivo | Dueño revoca consentimiento; Admin origen suspende/restablece |
+
+### Ampliaciones y sustituciones de red
+
+El contrato objetivo y sus entradas/salidas se especifican en [red-y-acceso](dominios/red-y-acceso.md#endpoints-propuestos): búsqueda con tarjeta mínima; cancelar, reenviar y renovar solicitudes; decisión y revocación por dueño; suspensión/restablecimiento por Admin origen; auditoría para origen y dueño verificado. Estas rutas son propuestas para implementar en Fase 2 y no existen aún en contracts.ts. No exponer las operaciones 23/24 como aprobación o revocación discrecional de la clínica.
 
 ## pacientes-y-propietarios (5)  — [detalle](dominios/pacientes-y-propietarios.md)
 
@@ -69,7 +75,7 @@ Convenciones: `:id` = id del servidor; `:rut` = RUT normalizado `12345678-9`; `:
 | 29 | `pharmacy.listPurchaseOrders` | GET | `/api/v1/pharmacy/purchase-orders` | `farmacia.inventario` *(propuesto)* |  |
 | 30 | `pharmacy.createPurchaseOrder` | POST | `/api/v1/pharmacy/purchase-orders` | `farmacia.inventario` | crea en borrador con costo estimado; unitCost lo calcula el servidor |
 | 31 | `pharmacy.sendPurchaseOrder` | POST | `/api/v1/pharmacy/purchase-orders/:id/send` | `farmacia.inventario` | Borrador→Enviada |
-| 32 | `pharmacy.receivePurchaseOrder` | POST | `/api/v1/pharmacy/purchase-orders/:id/receive` | `farmacia.inventario` | entrada de stock por cada ítem; Enviada→Recibida, atómico con kardex |
+| 32 | `pharmacy.receivePurchaseOrder` | POST | `/api/v1/pharmacy/purchase-orders/:id/receive` | `farmacia.inventario` | recepción por líneas/cantidades; Enviada→Parcialmente recibida→Recibida, atómico con kardex y lotes (p-24) |
 
 ## tienda (13)  — [detalle](dominios/tienda.md)
 
@@ -100,10 +106,10 @@ Convenciones: `:id` = id del servidor; `:rut` = RUT normalizado `12345678-9`; `:
 | 60 | `security.getNvrStorage` | GET | `/api/v1/security/nvr` | `seguridad.ver` |  |
 | 61 | `security.listEvents` | GET | `/api/v1/security/events` | `seguridad.ver` |  |
 | 62 | `security.createEvent` | POST | `/api/v1/security/events` | `seguridad.ver` *(propuesto)* |  |
-| 63 | `security.updateEvent` | PATCH | `/api/v1/security/events/:id` | `seguridad.ver` *(propuesto)* | Validar transición; resolvedAt |
+| 63 | `security.updateEvent` | PATCH | `/api/v1/security/events/:id` | `seguridad.ver` para abierto; `seguridad.administrar` para cerrar | Cerrado inmutable; resolvedAt servidor (p-26) |
 | 64 | `security.addEventNote` | POST | `/api/v1/security/events/:id/notes` | `seguridad.ver` *(propuesto)* |  |
 | 65 | `security.listAudit` | GET | `/api/v1/security/audit` | `seguridad.administrar` |  |
-| 66 | `security.logAudit` | POST | `/api/v1/security/audit` | según acción: `seguridad.boxes` / `seguridad.grabaciones` / `seguridad.ver` | Motivo obligatorio en Desactivó privacidad; idealmente generado por servidor |
+| 66 | `security.logAudit` (solo prototipo; retirar) | POST | `/api/v1/security/audit` | No es endpoint objetivo | Auditoría generada por servidor al ejecutar la acción autorizada (p-19/T4-2) |
 | 71 | `security.getSettings` | GET | `/api/v1/security/settings` | `seguridad.ver` |  |
 | 72 | `security.updateSettings` | PATCH | `/api/v1/security/settings` | `seguridad.administrar` | Excluir alarmArmed |
 | 73 | `security.setAlarm` | PUT | `/api/v1/security/alarm` | `seguridad.administrar` |  |
@@ -151,7 +157,7 @@ Convenciones: `:id` = id del servidor; `:rut` = RUT normalizado `12345678-9`; `:
 | 95 | `analytics.networkAlerts` | GET | `/api/v1/analytics/network-alerts` | sesión | Agregado anónimo de red |
 | 96 | `analytics.boxOccupancy` | GET | `/api/v1/analytics/box-occupancy` | sesión *(propuesto `reportes.financiero`)* | Requiere historial de boxes |
 
-## Resumen por dominio
+## Resumen del inventario del prototipo por dominio
 
 | Dominio | Operaciones |
 |---|---|
@@ -167,7 +173,7 @@ Convenciones: `:id` = id del servidor; `:rut` = RUT normalizado `12345678-9`; `:
 | analitica | 8 |
 | **Total** | **96** |
 
-## Resumen por método
+## Resumen del inventario del prototipo por método
 
 | Método | Cantidad |
 |---|---|

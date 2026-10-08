@@ -1,115 +1,83 @@
-# Red y acceso (compartición de fichas)
+# Red y acceso: contrato objetivo del backend
 
-> Fuentes: `src/domain/sharing.ts` · `src/domain/network.ts` · `src/domain/settings.ts` (`SharingPolicy`) · `src/services/contracts.ts` (`NetworkService`, `SharingService`) · `src/lib/store.tsx` (`sendRequest`, `respondRequest`, `revokeGrant`, `useAccess`, `useCanView`, `usePendingRequest`) · `src/services/mock/sharing.ts` · `src/components/sharing/*` · `src/components/network/network-search.tsx`
+[Decisiones](../../DECISIONES.md) · [Fase 2](../../roadmap/fase-02.md) · [API](../api.md)
 
-## Propósito
-Permite que una clínica vea la ficha de una mascota cuya clínica de origen es otra, mediante solicitud → aprobación (con consentimiento del dueño) → acceso con alcance y vigencia → revocación. Es el núcleo diferenciador de VetData. Reglas generales en [`../transversales.md#2-red-y-compartición-de-fichas`](../transversales.md).
+## Autoridad y estado
 
-Pantallas: `/clinicas/red` (directorio de la red y búsqueda por RUT), `/clinicas/compartidos` (accesos recibidos y otorgados), `/clinicas/solicitudes` (recibidas / enviadas), ficha `/pacientes/historial/[id]` (bloqueo `AccessGate`), `/ajustes/permisos` (política de compartición), campana del topbar.
+Reglas vigentes: p-03 a p-07 y p-10 de DECISIONES.md. Este documento sustituye el flujo de aprobación por clínica del prototipo. Describe el contrato a implementar, no endpoints ya disponibles. Las rutas nuevas son la propuesta técnica para revisión del desarrollador.
 
-## Entidades
+El código frontend, sus mocks y el modelo/seed Go todavía contienen `sharing.respond`, `sharing.revoke`, `red.aprobar` y `red.revocar`. Deben migrarse en fases 2/5; no constituyen autorización válida en la API real.
 
-### Clinic (catálogo de la red)
-| Campo | Tipo | Oblig. | Descripción / restricciones |
-|---|---|---|---|
-| id | uuid | sí | **No existe en el prototipo** (se usa `name` como clave). Agregar. |
-| name | string | sí | Único en la red. |
-| sector | string | sí | Comuna. Se usa en alertas de red y despachos. |
-| address, phone, email | string | sí | Contacto público dentro de la red. |
-| specialties | string[] | sí | |
-| joinedAt | date | sí | |
-| status | `ClinicStatus` | sí | `Conectada` \| `Invitación pendiente`. |
-| lastSync | datetime | no | Hoy texto ("07 oct 2026 · 11:02" o "—"). |
-| patients | int | sí | Pacientes registrados (dato referencial, agregado). |
+## Propósito y reglas
 
-### AccessRequest
-| Campo | Tipo | Oblig. | Descripción / restricciones |
-|---|---|---|---|
-| id | uuid | sí | Generado por servidor. |
-| patientId | id | sí | Mascota de **otra** clínica. |
-| ownerRut | RUT | sí | Copiado de la mascota al crear (snapshot). |
-| from | clinicId | sí | Clínica solicitante = clínica de la sesión. |
-| to | clinicId | sí | Clínica de origen de la mascota (= `patient.clinic`). |
-| requestedBy | userId | sí | De la sesión (hoy nombre). |
-| date | date | sí | Hoy (servidor). |
-| reason | string | sí | Motivo libre. Recomendado no vacío. |
-| scope | `AccessScope` | sí | Solicitado. |
-| duration | `AccessDuration` | sí | `30 \| 90 \| null`. |
-| status | `RequestStatus` | sí | `Pendiente` al crear. |
-| respondedAt | date | no | Al responder. |
-| *(nuevo)* respondedBy | userId | no | Quién respondió. |
-| *(nuevo)* consent | objeto | no | Declaración de consentimiento del dueño al aprobar (ver regla 7). |
+1. La clínica de origen custodia la ficha; **el dueño autoriza** compartirla con una clínica solicitante, por mascota, alcance y vigencia.
+2. La consulta pertenece a la clínica que la creó. Perder acceso a clínico ajeno no elimina citas, facturas ni registros propios de la receptora.
+3. La clínica activa y el usuario solicitante salen de la sesión. Relaciones por clinicId; nombres solo para presentación.
+4. Sin acceso, la búsqueda de red devuelve mascota (nombre, especie, raza, origen) y dueño (nombre, sector), sin contacto. RUT de búsqueda debe validarse; no es credencial de autenticación.
+5. Solo un grant vigente autoriza lectura compartida. Aplicar la misma regla en listas, detalle, búsqueda, tareas, agenda, boxes, analítica y adjuntos.
+6. Resumen clínico incluye identificación, alergias, condiciones crónicas y vacunas; excluye consultas, exámenes y recetas en la respuesta del servidor.
+7. Solicitudes propias, duplicadas pendientes o con grant vigente generan 409; renovación vinculada se diseña como operación explícita con su propio contrato.
+8. Una suspensión no permite eludir el freno mediante una solicitud/grant alternativo. La renovación no restablece consentimientos revocados ni suspensiones.
+9. Una política de clínica nunca omite el consentimiento del dueño ni amplía el alcance autorizado.
 
-Restricción: a lo más **una** solicitud `Pendiente` por (`patientId`, `from`).
+## Entidades y relaciones
 
-### AccessGrant
-| Campo | Tipo | Oblig. | Descripción / restricciones |
-|---|---|---|---|
-| id | uuid | sí | |
-| patientId | id | sí | |
-| ownerClinic | clinicId | sí | Clínica de origen (quien otorga). |
-| grantedTo | clinicId | sí | Clínica receptora. |
-| scope | `AccessScope` | sí | Alcance final (puede diferir del solicitado). |
-| since | date | sí | Fecha de aprobación. |
-| until | date \| null | sí | `null` = permanente. Último día vigente inclusive. |
-| revoked | bool | sí | `false` al crear. |
-| *(nuevo)* requestId | id | no | Solicitud que lo originó (trazabilidad). |
-| *(nuevo)* revokedAt / revokedBy | datetime / userId | no | |
-
-Relaciones: AccessRequest N—1 Patient; AccessGrant N—1 Patient; AccessGrant 0..1—1 AccessRequest.
-
-### SharingPolicy (por clínica)
-| Campo | Tipo | Descripción |
+| Entidad | Campos mínimos del contrato objetivo | Restricciones |
 |---|---|---|
-| defaultScope | `AccessScope` | Default del formulario de solicitud. Semilla `Resumen clínico`. |
-| defaultDuration | `AccessDuration` | Default. Semilla `90`. |
-| requireConsent | bool | Si al **aprobar** se exige consentimiento del dueño. Semilla `true`. |
-| notifyRequests | bool | Si se notifican solicitudes recibidas (campana). Semilla `true`. |
+| Clinic | id, name, datos de directorio | UUID estable; nombre no es clave. |
+| Owner | id, rut normalizado, contacto verificado | Global por RUT; vínculo por clínica y datos operativos aislados. |
+| AccessRequest | id, patientId, requestingClinicId, originClinicId, requestedBy, reason, requestedScope, requestedDuration, status, createdAt, expiresAt, respondedAt, previousRequestId opcional | Actor/origen desde servidor; una pendiente por mascota/receptora; expiresAt a 72 h del inicio del flujo de autorización. |
+| OwnerAuthorizationToken | hash, requestId o recurso/acción autorizados, expiresAt, usedAt | Secreto de un uso; no retornar hash a clientes ni guardar token en logs. |
+| ConsentEvidence | id, ownerId, requestId, grantId, scope, duration, confirmedAt, ip, method | Método email-link; evidencia inmutable ligada al dueño y autorización concreta. |
+| AccessGrant | id, requestId, consentId, patientId, originClinicId, grantedToClinicId, scope, since, until, revokedAt, suspension | since/until civiles; until inclusive; null permanente; estado derivado. |
+| Suspension | grantId, reason, actorId, suspendedAt, restoredAt, restoredBy | Admin de origen, motivo obligatorio, cambios auditados y notificados. |
+| SharedReadAudit | patientId, grantId, readerUserId, readerClinicId, scope, at | Insertar antes de devolver datos; acceso para origen y dueño verificado. |
+| SharingPolicy | defaultScope, defaultDuration, preferencias de notificación | Defaults de solicitud; requireConsent del prototipo no habilita excepciones. |
 
-Fuente semilla: `src/mocks/settings.ts:seedSharingPolicy`. Se edita en Ajustes → Permisos (operaciones en [usuarios-y-permisos](usuarios-y-permisos.md)).
+Los campos exactos y DTO se fijan en OpenAPI antes de T2-4. Token de decisión consumido no sirve para auditoría/revocación posterior: esos flujos exigen una nueva autorización temporal del dueño, limitada a su propósito.
 
-## Reglas de negocio
-1. **Nivel de acceso** `propio | compartido | ninguno`. Fuente: `src/domain/sharing.ts:accessLevel`. *(regla)* — aplicar en servidor a toda lectura.
-2. **Estado del grant** `Revocado > Vencido (until < hoy) > Vigente`. Fuente: `src/domain/sharing.ts:grantStatus`. *(regla)*; estado derivado con fecha del servidor.
-3. **Una solicitud por mascota**; se descartan mascotas propias y las que ya tienen solicitud `Pendiente` desde mi clínica. Fuente: `src/services/mock/sharing.ts:sendRequests`, `src/lib/store.tsx:sendRequest`. *(regla)*. Respuesta: lista de solicitudes efectivamente creadas (la UI informa cuántas). **Agregar**: descartar también mascotas con grant `Vigente` a mi clínica.
-4. **Solo la clínica de origen responde** (`request.to == clínica de sesión`) y solo si `Pendiente`. Fuente: `mock/sharing.ts:respond` (`if (req.status !== "Pendiente") return ok({request})`). *(regla)* → backend: 403 si no es la clínica de origen, 409 si no está pendiente.
-5. **Aprobar crea el grant** con `scope = terms?.scope ?? req.scope`, `duration = terms ? terms.duration : req.duration`, `since = hoy`, `until = duration ? hoy+duration : null`. Fuente: `mock/sharing.ts:respond`, `store.tsx:respondRequest`. *(regla)*
-6. **Rechazar** solo cambia estado y `respondedAt`. *(regla)*
-7. **Consentimiento**: si `policy(origen).requireConsent && !owner.shareConsent`, la aprobación requiere declaración explícita del usuario ("firma o SMS"). Fuente: `src/components/sharing/request-tabs.tsx:ApproveDialog` (`needsConsent`). *(regla; hoy no viaja al backend → agregar campo y validar, 422)*. La lista de solicitudes recibidas marca "Dueño sin consentimiento registrado" (`request-tabs.tsx`).
-8. **Revocar**: solo `ownerClinic`, solo grants `Vigente`. Fuente: `src/components/sharing/shared-tabs.tsx` (`canRevoke && status === "Vigente"`), `mock/sharing.ts:revoke`. *(regla)* → backend: 403/409.
-9. **Alcance "Resumen clínico"** expone solo identificación, alergias, condiciones y vacunas. Fuente: `src/components/sharing/access-gate.tsx:PatientSummary`. *(regla)* — proyección en servidor.
-10. **Clínica de la sesión**: `network.getCurrentClinic` devuelve hoy un **string** (nombre). Fuente: `contracts.ts:NetworkService.getCurrentClinic`. *(supuesto del prototipo)* → devolver objeto `{ id, name, … }`.
-11. **Defaults de solicitud** desde la política de **mi** clínica. Fuente: `src/components/sharing/request-access-dialog.tsx`. *(regla de UI)*
-12. **Campana de solicitudes**: cuenta solicitudes recibidas `Pendiente` solo si `notifyRequests`. Fuente: `src/components/topbar.tsx`. *(regla)*
-13. **Solicitudes recibidas sin responder desde ≥ 1 día** son prioridad Alta en Pendientes. Fuente: `src/lib/tasks.ts:useTasks` (`daysUntil(r.date) <= -1`). *(regla de UI)*
+## Estados y operaciones
 
-## Estados
-- AccessRequest: `Pendiente → Aprobada | Rechazada` (terminales). Ejecuta: clínica de origen con `red.aprobar`.
-- AccessGrant (derivado): `Vigente → Vencido` (tiempo) · `Vigente → Revocado` (clínica de origen con `red.revocar`).
-- Clinic: `Invitación pendiente → Conectada` (sin operación en el prototipo).
-Detalle en [`../estados.md`](../estados.md).
+Solicitud: `Esperando dueño → Aprobada | Denegada | Expirada | Cancelada`. Terminales no aceptan otra respuesta. Cancelada la ejecuta la solicitante; Expirada se deriva/aplica al superar 72 h, incluso si el job todavía no corrió.
 
-## Operaciones y endpoints sugeridos
-| Operación (servicio) | Método y ruta | Entrada | Salida | Permiso | Errores | Auditoría / efectos |
-|---|---|---|---|---|---|---|
-| `network.getCurrentClinic` | `GET /api/v1/me/clinic` | — | `string` (nombre) → recomendado `Clinic` | sesión | 401 | — |
-| `network.listClinics` | `GET /api/v1/network/clinics` | filtros: sector, especialidad, estado | `Clinic[]` | sesión | 401 | — |
-| `sharing.listRequests` | `GET /api/v1/sharing/requests` | `?direction=received\|sent&status=` | `AccessRequest[]` (solo donde mi clínica es `from` o `to`) | sesión (recibidas: `red.aprobar` recomendado para ver motivo/dueño) | 401 | — |
-| `sharing.listGrants` | `GET /api/v1/sharing/grants` | `?direction=received\|granted&status=` | `AccessGrant[]` con `status` derivado (recomendado incluirlo) | sesión | 401 | — |
-| `sharing.sendRequests` | `POST /api/v1/sharing/requests` | `{ patientIds[], scope, duration, reason }` | `AccessRequest[]` creadas | `red.solicitar` | 400, 403 | Evento `AccesoSolicitado` por solicitud → notifica a la clínica de origen |
-| `sharing.respond` | `POST /api/v1/sharing/requests/:id/response` | `{ approve, terms?: {scope, duration}, consent?: {confirmed, method} }` | `{ request, grant? }` | `red.aprobar` + ser clínica de origen | 403, 404, 409 (no pendiente), 422 (falta consentimiento) | Atómico: solicitud + grant. Auditoría del consentimiento. Evento `AccesoAprobado`/`AccesoRechazado` |
-| `sharing.revoke` | `POST /api/v1/sharing/grants/:id/revoke` | — | `AccessGrant` | `red.revocar` + ser clínica de origen | 403, 404, 409 (no vigente) | Evento `AccesoRevocado` → notifica a receptora; invalidar caché |
+Grant: `Revocado > Vencido > Suspendido > Vigente`. Esta precedencia es la propuesta de presentación; cualquiera de los tres primeros impide compartir. Hasta el final del día until en America/Santiago es vigente si no existe revocación/suspensión. Restablecer quita suspensión, sin alterar vigencia ni revocación.
 
-## Efectos en otros dominios
-- Un grant vigente hace visible la mascota en: listas de mascotas/dueños, agenda (agendar a mascotas compartidas), mapa de boxes (`clinic-activity.tsx` filtra pacientes con `canView`), analítica local (`lib/analytics.ts:visiblePatients`), tareas de vacunas vencidas, derivaciones y facturación. El backend debe aplicar el mismo filtro en todos esos endpoints.
-- Revocar o vencer un grant **no** borra citas/facturas existentes de la receptora sobre esa mascota → definir qué datos mínimos sigue viendo la receptora de sus propios documentos (`preguntas-abiertas.md#p-04`).
+Aprobar consume token y registra evidencia, solicitud y grant en una sola transacción. Denegar también consume token. El dueño puede reducir alcance, nunca ampliarlo. La vigencia otorgada no excede la solicitada. Correo fallido no concede acceso.
 
-## Datos de referencia / semilla
-- Catálogo de clínicas de la red (`src/mocks/network.ts:networkClinics`, 8 clínicas, 1 con invitación pendiente).
-- `SCOPES`, `DURATIONS` (`src/domain/sharing.ts`).
-- Política por defecto de cada clínica nueva (`seedSharingPolicy`).
+## Endpoints propuestos
 
-## Notas para el dev
-- El prototipo usa nombres de clínica como clave en todas las relaciones de red; migrar a ids.
-- No existe: cancelar una solicitud enviada, expiración de solicitudes pendientes, renovar/extender un grant, ver quién de la receptora consultó la ficha. Ver `preguntas-abiertas.md` (#p-05, #p-07).
-- Las mascotas tienen consultas registradas por **otras** clínicas (`Consultation.clinic`, p. ej. `p-001` tiene una consulta en VetCare Las Condes en `src/mocks/patients.ts`): el historial es de red. Quién es dueño de una consulta hecha por una clínica con acceso compartido → `preguntas-abiertas.md#p-03`.
+Prefijo /api/v1. Las rutas de dueño reciben credencial limitada en cuerpo o sesión temporal verificada; no utilizan sesión de clínica como sustituto de la identidad del dueño.
+
+| Operación objetivo | Método y ruta | Entrada / salida | Autorización y errores |
+|---|---|---|---|
+| network.listClinics | GET /network/clinics | Filtros → directorio paginado | Sesión, aislamiento según campos expuestos. |
+| network.search | GET /network/search | RUT validado → tarjetas mínimas | Sesión; rate limit y registro; 400 si RUT inválido. |
+| sharing.listRequests | GET /sharing/requests | Filtros → solicitudes de mi clínica, como solicitante u origen | Sesión y campos autorizados; origen recibe información, no poder de aprobación. |
+| sharing.listGrants | GET /sharing/grants | Filtros → grants con estado derivado | Sesión; solo relación autorizada. |
+| sharing.sendRequests | POST /sharing/requests | patientIds, scope, duration, reason → solicitudes | red.solicitar; 409 propia/duplicada/acceso vigente. Cada solicitud se autoriza por separado. |
+| sharing.cancelRequest | POST /sharing/requests/:id/cancel | → solicitud cancelada | Solicitante con red.solicitar; 409 si terminal. Invalida token. |
+| sharing.resendRequest | POST /sharing/requests/:id/resend | → estado de entrega | Solicitante con red.solicitar; límites y reemplazo seguro de token; no extensión silenciosa de las 72 h. |
+| sharing.renewRequest | POST /sharing/requests/:id/renew | scope, duration, reason → nueva solicitud vinculada | Solicitante; nuevo consentimiento obligatorio. Definir activación sin grants superpuestos antes de implementar. |
+| owner.decideRequest | POST /owner/sharing/requests/:id/decision | credencial, rut, decisión, alcance → request y grant opcional | Dueño verificado; 400 RUT inválido, 409 estado/token consumido; alcance superior rechazado. |
+| owner.revokeConsent | POST /owner/sharing/grants/:id/revoke | autorización temporal del dueño → grant revocado | Dueño verificado; invalida consentimiento/grant correspondiente y cachés. |
+| sharing.suspendGrant | POST /sharing/grants/:id/suspend | reason → grant | Admin de origen + red.suspender; 403/409/422. |
+| sharing.restoreGrant | POST /sharing/grants/:id/restore | reason → grant | Admin de origen + red.suspender; no renueva ni revive grant revocado. |
+| sharing.listAudit | GET /sharing/audit | filtros → lecturas autorizadas | Clínica de origen; no datos de otras custodias. |
+| owner.listAudit | GET /owner/sharing/audit | sesión temporal verificada → lecturas de sus mascotas | Dueño verificado; RUT conocido no basta. |
+
+`GET /me/clinic` se consolida en `GET /me` con user, clinic y permissions. Las rutas antiguas de aprobación por clínica y revocación discrecional se retiran del contrato objetivo; no se implementan como alias que eludan la autorización del dueño.
+
+## Eventos, atomicidad y retención
+
+- AccesoSolicitado entrega correo al dueño con solicitante, mascota, alcance, vigencia y enlace de un uso.
+- Aprobación/denegación informan al solicitante; el origen recibe notificación conforme a p-05.
+- Suspensión/restablecimiento informan al dueño y receptora e incluyen auditoría del actor/motivo.
+- Renovación es nueva solicitud vinculada; aviso siete días antes del vencimiento.
+- Outbox y operación de dominio se confirman juntos. Reintentar correo no repite grants.
+- Auditoría de lecturas: p-07 establece 2–3 años, exacto pendiente D-01. Auditoría administrativa: cinco años, p-19. Video: treinta días predeterminado. No habilitar purga de una categoría sin política aprobada.
+
+## Fixtures y aceptación
+
+Dos clínicas en grupos distintos, dueño verificado, usuario con memberships en ambas y cuatro roles. Casos con tarjeta mínima, resumen, completo, revocado, vencido y suspendido.
+
+Probar doble consumo de token, expiración/cancelación, correo fallido, escalamiento de alcance, revocación durante lectura, aislamiento de auditoría, pérdida de acceso y conservación de documentos propios. Cierre conforme a [Fase 2](../../roadmap/fase-02.md) y registro en [validación](../../roadmap/validacion.md).

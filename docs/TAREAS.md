@@ -2,7 +2,9 @@
 
 > Derivado de `docs/DECISIONES.md` + `docs/backend/` (api, transversales, permisos, estados, eventos).
 > Toda tarea referencia su decisión p-NN cuando aplica. Las decisiones son revisables en fase superior.
-> Convención: `- [ ]` pendiente · `- [x]` hecha. No escribir backend hasta cerrar Fase 0 + Fase 1.
+> Convención: `- [ ]` pendiente o parcial · `- [x]` validada con evidencia. Cerrar las decisiones bloqueantes de Fase 0 antes de avanzar; las fundaciones del backend se construyen dentro de Fase 1. T0-4 permanece diferida y no bloquea esas fundaciones.
+>
+> Roadmap ejecutable: [roadmap/README.md](roadmap/README.md). Estados y evidencia: [roadmap/validacion.md](roadmap/validacion.md). T1-1, T1-3 y T1-9 tienen una base parcial observada; sus casillas siguen abiertas hasta cumplir los criterios de aceptación. DECISIONES.md prevalece ante contradicciones con el prototipo.
 
 ## Fase 0 — Cierre pre-backend (bloqueante)
 
@@ -46,7 +48,7 @@
 - [ ] T3-2 Ficha escritura p-22: eventos append-only (crear mascota/dueño/consulta/vacuna/examen/receta, sin edit/delete; corrección con nuevo evento/anulación), diagnóstico texto+regla, `PatientStatus` calculado en servidor
 - [ ] T3-3 Facturación: `invoices.create` atómica (folio + factura + kardex Venta por línea con `medicationId` + 409 si stock insuficiente), precios desde catálogo, folio único por clínica en transacción
 - [ ] T3-4 Precios p-16: descuento % por línea en servidor (listas por convenio después)
-- [ ] T3-5 Farmacia p-13+p-24: derivaciones con bandeja "recibidas" por definir, firma simple = usuario autenticado, verificar receta vigente al dispensar/facturar, `dispense` atómico, OC (crear/enviar/recibir) atómica, ajustes con movimiento, costo real proveedor, modelo `movement_lot` (lote único en MVP), recepción parcial después
+- [ ] T3-5 Farmacia p-13+p-24: derivaciones con bandeja "recibidas" por definir, firma simple = usuario autenticado, verificar receta vigente al dispensar/facturar, `dispense` atómico, OC (crear/enviar/recibir) atómica, ajustes con movimiento, costo real proveedor, modelo `movement_lot` (lote único en MVP), recepción parcial en esta fase conforme a p-24
 - [ ] T3-6 Pagos p-11: registro manual (abonos parciales, medio, saldo dueño, `Pagada`), pasarela/arqueo después
 - [ ] T3-7 Notificaciones slice p-08: capa `notifications` abstracta + email transaccional, solo recordatorio citas, respetar `preferredContact` + opt-out
 - [ ] T3-8 Modelo adjuntos p-20: tabla `attachments` que hereda regla red/alcance (implementación S3/cloud/folder diferida)
@@ -82,7 +84,7 @@
 
 - [ ] T7-1 SII p-12: proveedor DTE, tipos 39/33 primero (61/52 después), folio/tipo/PDF/estado SII guardados, anulaciones
 - [ ] T7-2 Privacidad p-14: ARCO manual (exportar/borrar dueño con auditoría), contrato encargado, ficha retenida ~10 años con contacto anonimizado, RUT normalizado global
-- [ ] T7-3 Retención p-19: audit 5 años exportable, video 30 días default, dos retenciones separadas
+- [ ] T7-3 Retención p-07+p-19: auditoría general 5 años exportable; lecturas compartidas 2–3 años con duración exacta por validar; video 30 días default. Políticas separadas; sin purga automática de categorías pendientes de aprobación
 - [ ] T7-4 Infra prod: compose front+api+db, backups, TLS, logs, alertas, runbook piloto 1-2 clínicas
 
 ## Fase 8 — Integraciones post-MVP
@@ -92,4 +94,4 @@
 - [ ] T8-3 Adjuntos p-20: implementar storage elegido + AV + límites + control acceso
 - [ ] T8-4 Video p-09 (al final): proxy NVR/ONVIF-RTSP, URLs firmadas cortas, auditoría pre-firma, privacidad también en grabaciones, audio off default
 - [ ] T8-5 Receta avanzada p-13: firma electrónica, retenidos/psicotrópicos, vínculo Prescription↔Referral
-- [ ] T8-6 Diagnósticos p-22: VeNom/SNOMED-CT, recepción parcial + diferencias + FEFO p-24, listas de precios por convenio p-16
+- [ ] T8-6 Diagnósticos p-22: VeNom/SNOMED-CT, diferencias + FEFO p-24 sobre la recepción parcial implementada en Fase 3, listas de precios por convenio p-16

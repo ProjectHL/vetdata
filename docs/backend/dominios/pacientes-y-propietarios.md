@@ -1,5 +1,8 @@
 # Pacientes (mascotas) y propietarios
 
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-03: dueño global por RUT y vínculo por clínica; consultas de la clínica autora. p-22: escritura append-only con correcciones trazables y estado calculado en servidor. Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+
+
 > Fuentes: `src/domain/patients.ts` · `src/domain/owners.ts` · `src/services/contracts.ts` (`PatientsService`, `OwnersService`) · `src/services/mock/clinic.ts` (`patients`, `owners`) · `src/lib/lookups.ts` (`getPatient`, `petsOf`, `ownerLastVisit`, `getOwner`) · `src/lib/analytics.ts` · `src/components/sharing/access-gate.tsx` · `src/app/(dashboard)/pacientes/*`
 
 ## Propósito

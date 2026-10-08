@@ -1,5 +1,8 @@
 # Facturación (clínica)
 
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-16/p-17: precios servidor, netos y descuento por línea. Pagos manuales en Fase 3; estos documentos internos no son DTE hasta validar proveedor en Fase 7. Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+
+
 > Fuentes: `src/domain/invoices.ts` (`invoiceTotals`) · `src/domain/services.ts` (`Service`, `IVA_RATE`) · `src/services/contracts.ts` (`InvoicesService`, `ClinicService.listServices`) · `src/services/mock/clinic.ts:invoices` · `src/lib/store.tsx:addInvoice` · `src/components/care-actions/invoice-form.tsx` · `src/lib/metrics/customers.ts`
 
 ## Propósito

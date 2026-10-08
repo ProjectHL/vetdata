@@ -5,17 +5,22 @@
 > Convención: `NombreEvento { payload }` → **destinatarios** · canal sugerido. "Permiso" = solo usuarios con ese permiso en la clínica destinataria.
 
 ## 1. Red y compartición
-| Evento | Disparador (operación / regla) | Payload | Destinatarios · canal | Fuente |
-|---|---|---|---|---|
-| `AccesoSolicitado` | `sharing.sendRequests` (uno por solicitud creada) | requestId, patientId, from, to, scope, duration, reason | Clínica de origen (`to`), usuarios con `red.aprobar`; solo si `SharingPolicy(to).notifyRequests` · in-app (+ email opcional) | `topbar.tsx` (campana condicionada a `notifyRequests`), `lib/tasks.ts` (`solicitud:*`) |
-| `SolicitudSinResponder` | Job diario: solicitud `Pendiente` con ≥ 1 día | requestId, días | Clínica de origen (`red.aprobar`) · in-app (prioridad Alta) | `lib/tasks.ts` (prioridad Alta si `daysUntil(r.date) <= -1`) |
-| `AccesoAprobado` | `sharing.respond(approve)` | requestId, grantId, scope, until | Clínica solicitante (`from`), usuario `requestedBy` · in-app | `mock/sharing.ts:respond` |
-| `AccesoRechazado` | `sharing.respond(!approve)` | requestId | Clínica solicitante, `requestedBy` · in-app | ídem |
-| `ConsentimientoDeclarado` | Aprobación con `needsConsent` | requestId, ownerRut, userId, método | Auditoría · (y opcional aviso al dueño) | `sharing/request-tabs.tsx:ApproveDialog` |
-| `AccesoRevocado` | `sharing.revoke` | grantId, patientId, grantedTo | Clínica receptora (`grantedTo`) · in-app; invalidar cachés | `mock/sharing.ts:revoke` |
-| `AccesoPorVencer` | Job diario: grant vigente con `until` en ≤ N días (N a definir, p. ej. 7) | grantId, until | Clínica receptora (renovar) y origen · in-app | *(nuevo)* |
-| `AccesoVencido` | Job diario: `until < hoy` (transición derivada de `grantStatus`) | grantId | Clínica receptora · in-app | `domain/sharing.ts:grantStatus` |
-| `FichaCompartidaConsultada` | Lectura de mascota con nivel `compartido` | patientId, clinicId, userId, scope | Auditoría de la clínica de origen | *(nuevo, `transversales.md#2.9`)* |
+
+Contrato objetivo p-05/p-06/p-07/p-10. Sustituye eventos derivados de aprobación por clínica del prototipo.
+
+| Evento | Disparador | Payload mínimo | Destinatarios / efecto |
+|---|---|---|---|
+| AccesoSolicitado | Solicitud de B | requestId, patientId, requestingClinicId, scope, duration, expiresAt | Dueño por correo con enlace de un uso; origen informada sin aprobación |
+| SolicitudCancelada / SolicitudExpirada | Solicitante / tiempo | requestId, at | Solicitante; token inválido |
+| ConsentimientoAutorizado | Dueño decide aprobar | consentId, requestId, ownerId, scope, duration, at | Evidencia persistida; no publicar token ni RUT en eventos generales |
+| AccesoAprobado / AccesoDenegado | Decisión del dueño | requestId, grantId opcional | Solicitante; origen notificada |
+| ConsentimientoRevocado | Dueño verificado | consentId, grantIds, at | Invalidar accesos/cachés; avisar receptora/origen |
+| AccesoSuspendido / AccesoRestablecido | Admin origen | grantId, actorId, reason, at | Dueño y receptora; auditoría obligatoria |
+| AccesoPorVencer | Job diario, siete días antes | grantId, until | Receptora para renovar; nueva solicitud con consentimiento |
+| AccesoVencido | until anterior a hoy | grantId, at | Receptora; acceso se deniega aun si el job se retrasa |
+| FichaCompartidaConsultada | Lectura compartida | patientId, grantId, userId, clinicId, scope, at | Auditoría visible para origen y dueño verificado |
+
+Operación de dominio y outbox son atómicos. Reintentos de entrega no crean grants duplicados. La verificación del dueño para consultar auditoría no reutiliza un token de decisión consumido.
 
 ## 2. Agenda y atención
 | Evento | Disparador | Destinatarios · canal | Fuente |
