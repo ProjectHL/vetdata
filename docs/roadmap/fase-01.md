@@ -8,7 +8,7 @@ Entregar una API reproducible, autenticada y aislada por clínica, con convencio
 
 **Dependencia:** Preparación documental revisada; entorno de desarrollo disponible.
 
-**Estado inicial:** en curso (base parcial, sin aceptación funcional acreditada). Esta página especifica trabajo futuro; sus pruebas y entregables no están acreditados por existir el documento.
+**Estado técnico:** validada para desarrollo por API el 2026-10-08. [Acta de cierre y evidencia](cierre-fase-01.md). Revisión humana y habilitación de producción separadas; el correo fue verificado mediante SMTP y buzón local.
 
 ## Paquetes de trabajo
 
@@ -16,16 +16,16 @@ Ejecutar primero contratos y migraciones del paquete, luego reglas/servicios/han
 
 | Tarea | Decisiones / referencia | Estado | Entregable | Evidencia de aceptación |
 |---|---|---|---|---|
-| T1-1 | p-00, p-02, p-03 | en curso | Completar modelos, migraciones y seeds de clínicas, usuarios, dueños y pacientes. Hacer atómicos SQL y registro de versión; distinguir migración ausente de error SQL; seeds repetibles. | Instalación limpia, actualización desde 001/002, dos arranques concurrentes y reaplicación de seeds sin duplicados. |
-| T1-2 | p-01 | pendiente | Login, logout, refresh con rotación y detección de reutilización, recovery por correo y sesión httpOnly. Solo Activo inicia sesión. | Sesión expirada/revocada rechazada; refresh reutilizado invalida su familia; recovery de un uso probado. |
-| T1-3 | p-02 | en curso | Completar group, clinic y memberships. Clínica activa en sesión; cambio solo tras comprobar membresía y renovar contexto. | Un usuario en dos clínicas conserva roles separados; parámetros falsificados no cambian tenant. |
-| T1-4 | p-00 | pendiente | Contrato REST /api/v1 con errores, paginación, filtros, campos permitidos y DTO separados del modelo SQL. | Pruebas de contrato para respuestas, validaciones y recursos ajenos. |
-| T1-5 | p-03; T1-5 | pendiente | Normalización y validación módulo 11 de RUT en dueños, proveedores y perfil; unicidad del dueño normalizado. | Entradas equivalentes se normalizan igual; DV incorrecto devuelve 400; duplicado devuelve 409. |
-| T1-6 | p-17 | pendiente | CLP enteros netos, IVA centralizado, redondeo sobre neto total y desglose de bruto en boletas. | Casos de redondeo y totales manipulados; resultados calculados por servidor. |
-| T1-7 | p-15 | pendiente | Reloj inyectable; instantes con offset y fechas civiles diferenciadas; America/Santiago para reglas de negocio. | Cruces de medianoche y horario de verano; fechas civiles no cambian por UTC. |
-| T1-8 | T1-8 | pendiente | UUID servidor, correlativos transaccionales e Idempotency-Key asociado a actor, clínica, ruta y contenido. | Reintento devuelve resultado original; misma clave con contenido distinto devuelve 409; concurrencia sin duplicados. |
-| T1-9 | p-00 | en curso | CI con formato Go, vet, tests e integración Postgres; Compose, logs sin secretos, salud y tiempos máximos de DB. | Pipeline reproducible; caída de DB responde salud no disponible sin espera ilimitada. |
-| T1-10 | p-15 | pendiente | Horarios por clínica y profesional, feriados, duración configurable de slots y urgencias sin cita. | Slots consistentes; rechazo de horas fuera de disponibilidad; excepción de urgencia explícita. |
+| T1-1 | p-00, p-02, p-03 | validada | Completar modelos, migraciones y seeds de clínicas, usuarios, dueños y pacientes. Hacer atómicos SQL y registro de versión; distinguir migración ausente de error SQL; seeds repetibles. | Instalación limpia, actualización desde 001/002, dos arranques concurrentes y reaplicación de seeds sin duplicados. |
+| T1-2 | p-01 | validada | Login, logout, refresh con rotación y detección de reutilización, recovery por correo y sesión httpOnly. Solo Activo inicia sesión. | Sesión expirada/revocada rechazada; refresh reutilizado invalida su familia; recovery de un uso probado. |
+| T1-3 | p-02 | validada | Completar group, clinic y memberships. Clínica activa en sesión; cambio solo tras comprobar membresía y renovar contexto. | Un usuario en dos clínicas conserva roles separados; parámetros falsificados no cambian tenant. |
+| T1-4 | p-00 | validada | Contrato REST /api/v1 con errores, paginación, filtros, campos permitidos y DTO separados del modelo SQL. | Pruebas de contrato para respuestas, validaciones y recursos ajenos. |
+| T1-5 | p-03; T1-5 | validada | Normalización y validación módulo 11 de RUT en dueños, proveedores y perfil; unicidad del dueño normalizado. | Entradas equivalentes se normalizan igual; DV incorrecto devuelve 400; duplicado devuelve 409. |
+| T1-6 | p-17 | validada | CLP enteros netos, IVA centralizado, redondeo sobre neto total y desglose de bruto en boletas. | Casos de redondeo y totales manipulados; resultados calculados por servidor. |
+| T1-7 | p-15 | validada | Reloj inyectable; instantes con offset y fechas civiles diferenciadas; America/Santiago para reglas de negocio. | Cruces de medianoche y horario de verano; fechas civiles no cambian por UTC. |
+| T1-8 | T1-8 | validada | UUID servidor, correlativos transaccionales e Idempotency-Key asociado a actor, clínica, ruta y contenido. | Reintento devuelve resultado original; misma clave con contenido distinto devuelve 409; concurrencia sin duplicados. |
+| T1-9 | p-00 | validada | CI con formato Go, vet, tests e integración Postgres; Compose, logs sin secretos, salud y tiempos máximos de DB. | Pipeline reproducible; caída de DB responde salud no disponible sin espera ilimitada. |
+| T1-10 | p-15 | validada | Horarios por clínica y profesional, feriados, duración configurable de slots y urgencias sin cita. | Slots consistentes; rechazo de horas fuera de disponibilidad; excepción de urgencia explícita. |
 
 ## Contratos e interfaces
 
@@ -54,6 +54,6 @@ API y DB reproducibles, autenticación y recuperación verificadas, aislamiento 
 
 ## Dependencias externas y decisiones de implementación
 
-Correo real: seleccionar transporte y disponer de remitente/credenciales para verificar entrega. La captura local permite avanzar con tests; no acredita entrega real.
+Transporte implementado y verificado: SMTP con Mailpit local. La entrega al buzón local y recuperación por API están probadas. El proveedor/remitente público, credenciales y entregabilidad externa siguen como gate del despliegue; este cierre es técnico de desarrollo. Ver [acta](cierre-fase-01.md).
 
 Los identificadores D se resuelven en el registro del [roadmap](README.md#decisiones-y-dependencias-diferidas). Una tarea pasa a bloqueada solo cuando su ejecución alcanza una dependencia ausente; las restantes pueden avanzar.

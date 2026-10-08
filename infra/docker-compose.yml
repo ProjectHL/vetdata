@@ -11,9 +11,8 @@ services:
       context: ../frontend
       args:
         NEXT_PUBLIC_DATA_SOURCE: ${NEXT_PUBLIC_DATA_SOURCE:-mock}
-        # En compose el front habla a la API por nombre de servicio.
-        # Para correr el front fuera de compose (pnpm dev), usar http://localhost:4000.
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:4000}
+        # URL pública para el navegador; api:4000 se reserva a tráfico interno.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
     ports:
       - "${PORT:-3000}:3000"
     depends_on:
@@ -33,6 +32,14 @@ services:
     environment:
       - PORT=4000
       - DATABASE_URL=${DATABASE_URL:-postgresql://vetdata:vetdata@db:5432/vetdata}
+      - PUBLIC_WEB_URL=${PUBLIC_WEB_URL:-http://localhost:3000}
+      - APP_ENV=${APP_ENV:-development}
+      - SMTP_ADDR=${SMTP_ADDR:-}
+      - SMTP_FROM=${SMTP_FROM:-VetData <noreply@example.test>}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_ALLOW_PLAIN=${SMTP_ALLOW_PLAIN:-false}
+      - OUTBOX_KEY=${OUTBOX_KEY:-}
     depends_on:
       db:
         condition: service_healthy

@@ -16,6 +16,7 @@ import (
 	"github.com/vetdata/api/internal/config"
 	"github.com/vetdata/api/internal/db"
 	"github.com/vetdata/api/internal/handler"
+	"github.com/vetdata/api/internal/notifications"
 	"github.com/vetdata/api/migrations"
 )
 
@@ -28,7 +29,8 @@ func main() {
 		os.Exit(1)
 	}
 
-	ctx := context.Background()
+	ctx, stopApp := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stopApp()
 
 	pool, err := db.New(ctx, cfg.DatabaseURL)
 	if err != nil {
@@ -42,13 +44,38 @@ func main() {
 		os.Exit(1)
 	}
 
-	mux := handler.New(pool, logger)
+	var sender notifications.Sender
+	if cfg.SMTPAddr != "" {
+		sender = notifications.SMTP{Addr: cfg.SMTPAddr, From: cfg.SMTPFrom, User: cfg.SMTPUser, Password: cfg.SMTPPassword, AllowPlain: cfg.SMTPAllowPlain}
+	}
+	mail, err := notifications.New(pool, cfg.OutboxKey, sender)
+	if err != nil {
+		logger.Error("notification config invalid", "error", err)
+		os.Exit(1)
+	}
+	go func() {
+		tick := time.NewTicker(time.Second)
+		defer tick.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-tick.C:
+				if _, err := mail.DeliverOne(ctx); err != nil && ctx.Err() == nil {
+					logger.Error("notification delivery failed", "error", err)
+				}
+			}
+		}
+	}()
+	mux := handler.NewWithOptions(pool, logger, handler.Options{Origin: cfg.Origin, SecureCookies: cfg.SecureCookies, Mail: mail})
 
 	srv := &http.Server{
-		Addr:         ":" + cfg.Port,
-		Handler:      mux,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
+		Addr:              ":" + cfg.Port,
+		Handler:           mux,
+		ReadTimeout:       10 * time.Second,
+		ReadHeaderTimeout: 5 * time.Second,
+		WriteTimeout:      20 * time.Second,
+		IdleTimeout:       60 * time.Second,
 	}
 
 	go func() {
@@ -59,9 +86,7 @@ func main() {
 		}
 	}()
 
-	stop := make(chan os.Signal, 1)
-	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
-	<-stop
+	<-ctx.Done()
 
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()

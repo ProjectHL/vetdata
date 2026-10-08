@@ -6,7 +6,7 @@ Documento para revisión con el desarrollador. Fecha de inventario: **2026-10-08
 
 [DECISIONES.md](../DECISIONES.md) determina las reglas de producto; [TAREAS.md](../TAREAS.md) organiza las fases. Este roadmap transforma esas tareas en entregables y evidencias. Los contratos del prototipo documentan el punto de partida y no prevalecen sobre decisiones cerradas.
 
-La entrega actual es documentación de ejecución y reconciliación de contratos. La existencia de estos archivos no acredita la implementación funcional de las ocho fases. No se cambian decisiones p-NN mediante este roadmap. Si una validación futura las modifica, aplicar el registro de cambio de DECISIONES.md, incluida su entrada Engram; no afirmar sincronización si ese sistema no está disponible.
+La **Fase 1 está validada técnicamente para desarrollo por API**: [cierre y evidencia](cierre-fase-01.md), [instalación Docker](../backend/instalacion-fase1.md). Las fases restantes siguen abiertas. El [avance técnico](avance-backend.md) conserva el inventario de los paquetes adelantados. Las [definiciones pendientes del desarrollador](pendientes-dev.md) se conservan en Markdown por instrucción del usuario. No se cambian decisiones p-NN mediante este roadmap. Si una validación futura las modifica, aplicar el registro de cambio de DECISIONES.md, incluida su entrada Engram; no afirmar sincronización si ese sistema no está disponible.
 
 Secuencia: preparación → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Las fases 1–4 se validan por API; las pantallas y el enlace del dueño se conectan en Fase 5. Las integraciones externas se seleccionan al llegar a su fase. No hay estimaciones de calendario sin capacidad del equipo acordada.
 
@@ -23,7 +23,9 @@ Secuencia: preparación → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Las fas
 
 El alcance MVP definido en T0-7 sigue siendo fundaciones, identidad/red, agenda y pacientes de lectura. El roadmap completo es más amplio. En Fase 7, el piloto debe enumerar módulos habilitados; no equiparar desarrollo de un módulo con habilitación comercial.
 
-## Preparación y estado observado
+## Preparación y estado observado al crear el roadmap
+
+Inventario histórico anterior a la implementación. Para el estado vigente, consultar [avance-backend.md](avance-backend.md) y [validacion.md](validacion.md).
 
 | Elemento | Evidencia del repositorio | Estado / brecha |
 |---|---|---|

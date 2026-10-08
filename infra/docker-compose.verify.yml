@@ -1,0 +1,63 @@
+# Destructive fixtures are confined to vetdata-verify with private tmpfs DB.
+name: vetdata-verify
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: verify
+      POSTGRES_PASSWORD: verify-only
+      POSTGRES_DB: vetdata_verify
+    tmpfs: [/var/lib/postgresql/data]
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U verify -d vetdata_verify"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  mail:
+    image: axllent/mailpit:v1.20
+  setup:
+    build: ../backend
+    environment:
+      DATABASE_URL: postgresql://verify:verify-only@db:5432/vetdata_verify?sslmode=disable
+      BOOTSTRAP_CLINIC_ID: 660e8400-e29b-41d4-a716-446655440002
+      BOOTSTRAP_NAME: Verification Admin
+      BOOTSTRAP_EMAIL: admin@example.test
+    entrypoint: [/bin/sh, -c]
+    command: ["printf '%s\n' 'Verify-only-password-123' | /usr/local/bin/setup --seed-dev --admin"]
+    depends_on:
+      db: {condition: service_healthy}
+  api:
+    build: ../backend
+    environment:
+      DATABASE_URL: postgresql://verify:verify-only@db:5432/vetdata_verify?sslmode=disable
+      PUBLIC_WEB_URL: http://localhost:3000
+      SMTP_ADDR: mail:1025
+      SMTP_FROM: VetData <noreply@example.test>
+      SMTP_ALLOW_PLAIN: "true"
+      # Public test-only key, never used by the application stack.
+      OUTBOX_KEY: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=
+    depends_on:
+      setup: {condition: service_completed_successfully}
+      mail: {condition: service_started}
+    healthcheck:
+      test: [CMD-SHELL, "wget -q --spider http://127.0.0.1:4000/healthz"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+  smoke:
+    image: golang:1.26-alpine
+    working_dir: /src
+    volumes:
+      - ../backend:/src:ro
+      - go_modules:/go/pkg/mod
+      - go_build:/root/.cache/go-build
+    environment:
+      VERIFY_API_URL: http://api:4000
+      VERIFY_MAIL_URL: http://mail:8025
+      CGO_ENABLED: "0"
+    depends_on:
+      api: {condition: service_healthy}
+    command: [go, test, -count=1, -v, ./integration]
+volumes:
+  go_modules:
+  go_build:

@@ -1,0 +1,34 @@
+# Isolated integration stack. No ports or production volumes are used.
+name: vetdata-tests
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: vetdata_test
+      POSTGRES_PASSWORD: test-only
+      POSTGRES_DB: vetdata_test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vetdata_test -d vetdata_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data
+  test:
+    image: golang:1.26-alpine
+    working_dir: /src
+    volumes:
+      - ../backend:/src:ro
+      - go_modules:/go/pkg/mod
+      - go_build:/root/.cache/go-build
+    environment:
+      TEST_DATABASE_URL: postgresql://vetdata_test:test-only@db:5432/vetdata_test?sslmode=disable
+      REQUIRE_INTEGRATION: "1"
+      CGO_ENABLED: "0"
+    depends_on:
+      db:
+        condition: service_healthy
+    command: ["sh", "scripts/check.sh"]
+volumes:
+  go_modules:
+  go_build:

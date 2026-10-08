@@ -1,0 +1,23 @@
+name: Backend
+on:
+  push:
+    paths: ["backend/**", "infra/docker-compose*.yml", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**", "infra/docker-compose*.yml", ".github/workflows/backend.yml"]
+permissions:
+  contents: read
+jobs:
+  postgres-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Integration tests with isolated Postgres
+        run: docker compose -f infra/docker-compose.test.yml run --rm test
+      - name: Built image, clean installation and SMTP recovery
+        run: docker compose -f infra/docker-compose.verify.yml up --build --abort-on-container-exit --exit-code-from smoke smoke
+      - name: Cleanup test environment
+        if: always()
+        run: |
+          docker compose -f infra/docker-compose.test.yml down --volumes
+          docker compose -f infra/docker-compose.verify.yml down --volumes

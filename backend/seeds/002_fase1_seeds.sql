@@ -149,7 +149,7 @@ ON CONFLICT DO NOTHING;
 
 ------------------------------------------------------------------------
 -- role_permissions semilla: matriz defaultRolePermissions para Providencia.
--- Admin = 21 permisos; Veterinario/Recepción/Farmacia según settings.ts.
+-- Admin = 20 permisos; Veterinario/Recepción/Farmacia según settings.ts.
 ------------------------------------------------------------------------
 -- Admin: todos los permisos
 INSERT INTO role_permissions (clinic_id, role, permission) VALUES
@@ -161,8 +161,7 @@ INSERT INTO role_permissions (clinic_id, role, permission) VALUES
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'farmacia.dispensar'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'farmacia.inventario'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'red.solicitar'),
-    ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'red.aprobar'),
-    ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'red.revocar'),
+    ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'red.suspender'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'tienda.vender'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'tienda.inventario'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'tienda.compras'),
@@ -173,9 +172,10 @@ INSERT INTO role_permissions (clinic_id, role, permission) VALUES
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'seguridad.grabaciones'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'seguridad.administrar'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'reportes.financiero'),
-    ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'usuarios.administrar');
+    ('660e8400-e29b-41d4-a716-446655440002', 'Admin', 'usuarios.administrar')
+ON CONFLICT DO NOTHING;
 
--- Veterinario: 8 permisos
+-- Veterinario: 7 permisos
 INSERT INTO role_permissions (clinic_id, role, permission) VALUES
     ('660e8400-e29b-41d4-a716-446655440002', 'Veterinario', 'ficha.ver'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Veterinario', 'ficha.editar'),
@@ -183,8 +183,8 @@ INSERT INTO role_permissions (clinic_id, role, permission) VALUES
     ('660e8400-e29b-41d4-a716-446655440002', 'Veterinario', 'facturas.emitir'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Veterinario', 'medicamentos.derivar'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Veterinario', 'red.solicitar'),
-    ('660e8400-e29b-41d4-a716-446655440002', 'Veterinario', 'red.aprobar'),
-    ('660e8400-e29b-41d4-a716-446655440002', 'Veterinario', 'soporte.crear');
+    ('660e8400-e29b-41d4-a716-446655440002', 'Veterinario', 'soporte.crear')
+ON CONFLICT DO NOTHING;
 
 -- Recepción: 6 permisos
 INSERT INTO role_permissions (clinic_id, role, permission) VALUES
@@ -193,7 +193,8 @@ INSERT INTO role_permissions (clinic_id, role, permission) VALUES
     ('660e8400-e29b-41d4-a716-446655440002', 'Recepción', 'red.solicitar'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Recepción', 'tienda.vender'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Recepción', 'soporte.crear'),
-    ('660e8400-e29b-41d4-a716-446655440002', 'Recepción', 'seguridad.ver');
+    ('660e8400-e29b-41d4-a716-446655440002', 'Recepción', 'seguridad.ver')
+ON CONFLICT DO NOTHING;
 
 -- Farmacia: 8 permisos
 INSERT INTO role_permissions (clinic_id, role, permission) VALUES
@@ -204,4 +205,5 @@ INSERT INTO role_permissions (clinic_id, role, permission) VALUES
     ('660e8400-e29b-41d4-a716-446655440002', 'Farmacia', 'tienda.inventario'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Farmacia', 'tienda.compras'),
     ('660e8400-e29b-41d4-a716-446655440002', 'Farmacia', 'soporte.crear'),
-    ('660e8400-e29b-41d4-a716-446655440002', 'Farmacia', 'seguridad.ver');
+    ('660e8400-e29b-41d4-a716-446655440002', 'Farmacia', 'seguridad.ver')
+ON CONFLICT DO NOTHING;

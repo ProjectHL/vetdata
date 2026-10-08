@@ -1,0 +1,11 @@
+# Development-only capture: messages never leave this local SMTP service.
+services:
+  mail:
+    image: axllent/mailpit:v1.20
+    ports:
+      - "127.0.0.1:8025:8025"
+  api:
+    environment:
+      SMTP_ADDR: mail:1025
+      SMTP_ALLOW_PLAIN: "true"
+      OUTBOX_KEY: ${OUTBOX_KEY:?Generate OUTBOX_KEY in a local environment file}

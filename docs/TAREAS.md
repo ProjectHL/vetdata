@@ -4,7 +4,7 @@
 > Toda tarea referencia su decisión p-NN cuando aplica. Las decisiones son revisables en fase superior.
 > Convención: `- [ ]` pendiente o parcial · `- [x]` validada con evidencia. Cerrar las decisiones bloqueantes de Fase 0 antes de avanzar; las fundaciones del backend se construyen dentro de Fase 1. T0-4 permanece diferida y no bloquea esas fundaciones.
 >
-> Roadmap ejecutable: [roadmap/README.md](roadmap/README.md). Estados y evidencia: [roadmap/validacion.md](roadmap/validacion.md). T1-1, T1-3 y T1-9 tienen una base parcial observada; sus casillas siguen abiertas hasta cumplir los criterios de aceptación. DECISIONES.md prevalece ante contradicciones con el prototipo.
+> Roadmap ejecutable: [roadmap/README.md](roadmap/README.md). Estados y evidencia: [roadmap/validacion.md](roadmap/validacion.md). Fase 1 validada técnicamente para desarrollo por API; evidencia y límites en [cierre-fase-01.md](roadmap/cierre-fase-01.md). Las otras fases siguen abiertas. DECISIONES.md prevalece ante contradicciones con el prototipo.
 
 ## Fase 0 — Cierre pre-backend (bloqueante)
 
@@ -18,16 +18,16 @@
 
 ## Fase 1 — Fundaciones técnicas
 
-- [ ] T1-1 Crear repo backend, migraciones, seeds desde `src/mocks/` (pacientes, dueños, clínicas, settings)
-- [ ] T1-2 Auth p-01: cookie httpOnly + refresh rotation + expiración, recovery email, `GET /me` → `{user, clinic, permissions[]}`, solo `Activo` loguea
-- [ ] T1-3 Multitenant p-02: tablas `group + clinic_id`, tenant desde sesión (nunca parámetro cliente), `clinicId` estable (no nombre), membership por clínica/rol
-- [ ] T1-4 Convenciones API: REST `/api/v1`, errores 400/401/403/404/409/422, paginación + filtros que ya usa la UI, recursos en inglés
-- [ ] T1-5 RUT p-06-transversal: normalizar sin puntos con guion, validar DV módulo 11 (400 si falla), RUT único dueño, normalizar proveedores y perfil clínica
-- [ ] T1-6 Montos p-17: todo interno en neto, CLP enteros, IVA 19% en una sola constante backend, factura neto→IVA→total con redondeo sobre neto total, boleta bruta con `ivaIncluded`
-- [ ] T1-7 Fechas p-15: hora real `America/Santiago`, ISO 8601 con offset en instantes, `date` solo civil (nacimiento/vencimiento/cita), eliminar `TODAY/NOW_TIME` fijos
-- [ ] T1-8 Ids p-09-transversal: UUIDs servidor, correlativos por clínica en transacción, `Idempotency-Key` en POSTs, devolver recurso canónico, errores explícitos para revertir optimista
-- [ ] T1-9 CI (lint+migrate+test), compose local con DB, observabilidad base (logs, healthcheck)
-- [ ] T1-10 Horarios p-15: horario estructurado por clínica + profesional + feriados, slots 30' configurables, flag urgencia sin cita (reemplaza `SLOTS` fijo)
+- [x] T1-1 Crear repo backend, migraciones, seeds desde `src/mocks/` (pacientes, dueños, clínicas, settings)
+- [x] T1-2 Auth p-01: cookie httpOnly + refresh rotation + expiración, recovery email, `GET /me` → `{user, clinic, permissions[]}`, solo `Activo` loguea
+- [x] T1-3 Multitenant p-02: tablas `group + clinic_id`, tenant desde sesión (nunca parámetro cliente), `clinicId` estable (no nombre), membership por clínica/rol
+- [x] T1-4 Convenciones API: REST `/api/v1`, errores 400/401/403/404/409/422, paginación + filtros que ya usa la UI, recursos en inglés
+- [x] T1-5 RUT p-06-transversal: normalizar sin puntos con guion, validar DV módulo 11 (400 si falla), RUT único dueño, normalizar proveedores y perfil clínica
+- [x] T1-6 Montos p-17: todo interno en neto, CLP enteros, IVA 19% en una sola constante backend, factura neto→IVA→total con redondeo sobre neto total, boleta bruta con `ivaIncluded`
+- [x] T1-7 Fechas p-15: hora real `America/Santiago`, ISO 8601 con offset en instantes, `date` solo civil (nacimiento/vencimiento/cita), eliminar `TODAY/NOW_TIME` fijos
+- [x] T1-8 Ids p-09-transversal: UUIDs servidor, correlativos por clínica en transacción, `Idempotency-Key` en POSTs, devolver recurso canónico, errores explícitos para revertir optimista
+- [x] T1-9 CI (lint+migrate+test), compose local con DB, observabilidad base (logs, healthcheck)
+- [x] T1-10 Horarios p-15: horario estructurado por clínica + profesional + feriados, slots 30' configurables, flag urgencia sin cita (reemplaza `SLOTS` fijo)
 
 ## Fase 2 — Núcleo: identidad + red (diferencial)
 
