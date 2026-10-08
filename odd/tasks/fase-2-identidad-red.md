@@ -8,7 +8,7 @@ Usuarios/invitaciones/roles por clínica + regla de acceso owner-driven + solici
 ## Tasks
 - [x] T2-1 Usuarios/invitaciones/roles (matriz por clínica, invitaciones con expiración, lastAccess, anti-autobloqueo 409; muere `red.aprobar`, nace `red.suspender`)
 - [x] T2-2 Regla acceso en cada lectura (accessLevel + grantStatus derivado; propio/compartido/ninguno + Vigente/Suspendido/Revocado/Vencido; lecturas operativas por tenant T1-3)
-- [ ] T2-3 Alcance en servidor (Ficha completa vs Resumen clínico, 404 vs 403, rate-limit + log)
+- [x] T2-3 Alcance en servidor (Ficha completa vs Resumen clínico, 404 vs 403, rate-limit + log)
 - [ ] T2-4 Solicitudes owner-driven (link token un solo uso hash 72h, estados, 409, renovar linkeada)
 - [ ] T2-5 Consentimiento owner-driven (RUT DV + aprueba/deniega/baja alcance, evidencia IP/timestamp, revocar mata grants)
 - [ ] T2-6 Freno emergencia `red.suspender` (solo origen Admin, motivo obligatorio, auditado, reversible)
@@ -33,3 +33,4 @@ Rama de trabajo nueva desde `review/fase-1-validacion`. Solo `backend/` + `docs/
 - 2026-10-08: tracking creado al firmar Fase 1. Siguiente: T2-1.
 - 2026-10-08: T2-1 cerrada sobre `review/fase-1-validacion` — `TestLastAdminAndCrossClinicMembership` + nuevo `TestInviteAcceptSingleUseAndExpiry` (invitar→aceptar→login, reuso 400/409, expirada 400) PASS en suite aislada `vetdata-tests`; `go vet` + `gofmt -l` limpios. Gap cerrado: el flujo de invitación no tenía test dedicado. Frontend con `red.aprobar` queda intacto hasta Fase 5.
 - 2026-10-08: T2-2 cerrada — `TestOwnerConsentProjectionSuspensionAndRevocation` (ya existía, PASS) + nuevo `TestExpiredGrantDeniesRead` (grant con `until` pasado → GET 404 y excluido del listado) PASS; `go vet` + `gofmt` limpios. Aprendizajes: la decisión del dueño exige `scope` explícito (sin él → 400 `scope_escalation`); `sharing_grants` tiene `CHECK(until IS NULL OR until>=since)`, para simular vencido hay que mover `since` y `until` juntos.
+- 2026-10-08: T2-3 cerrada — nuevo `TestNetworkSearchMinimalRateLimitAndAudit` PASS: tarjeta mínima sin fugas (ni RUT, chip, teléfono, diagnósticos ni historial), `network.searched` auditado, 429 al superar 20/min, 403 sin `red.solicitar`. Matriz confirmada en `server.go`: 401 sin sesión, 403 sin permiso (`permitted`), 404 sin acceso (sin leak), 429 con `limited`.

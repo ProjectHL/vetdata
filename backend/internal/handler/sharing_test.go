@@ -183,6 +183,52 @@ func TestExpiredGrantDeniesRead(t *testing.T) {
 		t.Fatal("expired listed", w.Code)
 	}
 }
+func TestNetworkSearchMinimalRateLimitAndAudit(t *testing.T) {
+	f, _, other, _, _ := setupSharing(t)
+	ctx := context.Background()
+	w := f.request("GET", "/api/v1/network/search?rut=12345678-5", nil, other...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	body := w.Body.String()
+	if !strings.Contains(body, "Test patient") {
+		t.Fatal("minimal card", body)
+	}
+	for _, leak := range []string{"private-phone", "secret", "chip", "ownerRut", "consultations", "12345678-5"} {
+		if strings.Contains(body, leak) {
+			t.Fatal("search leak", leak)
+		}
+	}
+	var audits int
+	if err := f.pool.QueryRow(ctx, "SELECT count(*) FROM audit_events WHERE clinic_id=$1 AND action='network.searched'", f.other).Scan(&audits); err != nil || audits < 1 {
+		t.Fatal("search audit", audits, err)
+	}
+	for i := 0; i < 25; i++ {
+		w = f.request("GET", "/api/v1/network/search?rut=12345678-5", nil, other...)
+	}
+	if w.Code != 429 {
+		t.Fatal("rate limit", w.Code)
+	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte("Test-password-123"), 4)
+	uid := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO users(id,name,email,password_hash,status) VALUES($1,'NoRed','nored@example.test',$2,'Activo')", uid, string(hash)); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "INSERT INTO memberships(user_id,clinic_id,role) VALUES($1,$2,'Recepción')", uid, f.other); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "DELETE FROM role_permissions WHERE clinic_id=$1 AND role='Recepción' AND permission='red.solicitar'", f.other); e != nil {
+		t.Fatal(e)
+	}
+	w = f.request("POST", "/api/v1/auth/login", map[string]string{"email": "nored@example.test", "password": "Test-password-123", "clinicId": f.other})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/network/search?rut=12345678-5", nil, w.Result().Cookies()...)
+	if w.Code != 403 {
+		t.Fatal("forbidden search", w.Code)
+	}
+}
 func TestInviteAcceptSingleUseAndExpiry(t *testing.T) {
 	f, own, _, _, _ := setupSharing(t)
 	ctx := context.Background()
