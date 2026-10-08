@@ -1,5 +1,7 @@
 # Arquitectura de VetData (prototipo frontend)
 
+> Rutas en este documento son relativas a `frontend/` (el front vive en `frontend/src/` desde la separación front/back; ver README raíz).
+
 > Documento generado a partir del código actual (`src/`) con la skill `arquitectura-vetdata`.
 > Detalle por módulo: `.claude/skills/arquitectura-vetdata/references/modulos.md`.
 > Flujos entre canales: `.claude/skills/arquitectura-vetdata/references/conexiones.md`.

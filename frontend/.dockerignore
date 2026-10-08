@@ -1,14 +1,11 @@
+# El contexto del front no incluye artefactos de build del host:
+# node_modules y .next se regeneran dentro del builder.
 node_modules
 .next
-out
-build
-.git
-.gitignore
-.env*
+tsconfig.tsbuildinfo
+npm-debug.log*
+.env
+.env.*
 !.env.example
-*.tsbuildinfo
-next-env.d.ts
-coverage
-.DS_Store
-.vercel
-infra
+Dockerfile
+.dockerignore

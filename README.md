@@ -1,8 +1,8 @@
 # 🐾 VetData
 
-VetData es un **dashboard de datos de mascotas compartido entre clínicas veterinarias** de Chile. Este repositorio contiene un prototipo de frontend para gestionar consultas, pacientes, clínicas, farmacia, tienda, seguridad, análisis y soporte.
+VetData es un **dashboard de datos de mascotas compartido entre clínicas veterinarias** de Chile. Este repositorio contiene el frontend (prototipo funcional con datos simulados) y el backend en Go (en construcción) para gestionar consultas, pacientes, clínicas, farmacia, tienda, seguridad, análisis y soporte.
 
-> **Estado:** prototipo frontend. Los datos se cargan desde fuentes simuladas en memoria y no existen servicios de backend completos.
+> **Estado:** frontend funcional con mocks + API Go con healthcheck y migraciones. Sin endpoints de dominio todavía (Fase 1 en curso, ver [docs/TAREAS.md](docs/TAREAS.md)).
 
 ## ✨ Funcionalidades
 
@@ -18,34 +18,43 @@ VetData es un **dashboard de datos de mascotas compartido entre clínicas veteri
 
 ## 🛠️ Tecnologías
 
-- **Next.js 16** con App Router.
-- **React 19** y TypeScript 5.
-- **Tailwind CSS v4**.
-- **shadcn/ui** y Radix UI.
-- **Lucide React** para iconografía.
-- **Recharts** para gráficos.
-- **pnpm** como gestor de paquetes.
+**Frontend** ([frontend/](frontend/)): Next.js 16 (App Router), React 19, TypeScript 5, Tailwind CSS v4, shadcn/ui + Radix UI, Lucide React, Recharts, pnpm.
 
-## 🚀 Instalación y ejecución
+**Backend** ([backend/](backend/)): Go 1.26, Postgres 17, `pgx`, migraciones embebidas aplicadas al arrancar.
 
-El proyecto requiere **Node.js 20 o superior** y **pnpm**.
+**Infra** ([infra/](infra/)): Docker Compose (web :3000 + api :4000 + db :5435).
+
+## 🚀 Ejecución con Docker (recomendado)
 
 ```bash
+docker compose -f infra/docker-compose.yml up --build
+```
+
+- Web: http://localhost:3000 (redirige a /login, login simulado acepta cualquier correo)
+- API: http://localhost:4000/healthz
+- Postgres: localhost:5435
+
+## 🚀 Desarrollo local
+
+**Frontend** (requiere Node.js 22+ y pnpm 11):
+
+```bash
+cd frontend
 pnpm install
-pnpm dev
+pnpm dev   # http://localhost:3000, con NEXT_PUBLIC_API_URL=http://localhost:4000
 ```
 
-La aplicación estará disponible en:
+**Backend** (requiere Go 1.26 + Postgres):
 
-```text
-http://localhost:3000
+```bash
+cd backend
+DATABASE_URL=postgresql://vetdata:vetdata@localhost:5435/vetdata go run ./cmd/api  # :4000
 ```
-
-Al abrirla, se redirige al inicio de sesión. El login simulado acepta cualquier correo y contraseña.
 
 ## 🧪 Comandos
 
 ```bash
+cd frontend
 pnpm dev          # Iniciar servidor de desarrollo
 pnpm build        # Crear versión de producción
 pnpm start        # Ejecutar la versión compilada
@@ -54,7 +63,7 @@ pnpm lint         # Ejecutar ESLint
 
 ## ⚙️ Configuración
 
-Los valores opcionales se pueden definir en `.env.local`. Consulte [.env.example](.env.example) como referencia.
+Los valores opcionales se pueden definir en `frontend/.env.local`. Consulte [frontend/.env.example](frontend/.env.example) como referencia.
 
 | Variable | Valor por defecto | Uso |
 |---|---|---|
@@ -82,14 +91,18 @@ Para buscar rápidamente desde cualquier pantalla, use **Cmd/Ctrl + K**.
 La estructura principal es:
 
 ```text
-src/app/                  # Rutas y componentes de servidor
-src/components/          # Componentes de interfaz y estados interactivos
-src/domain/               # Tipos y reglas del dominio
-src/lib/                  # Stores, utilidades y catálogos
-src/mocks/                # Datos simulados
-src/services/contracts.ts # Contratos de las operaciones
-src/services/mock/        # Implementación simulada
-src/services/http/        # Implementación preparada para la API
+frontend/src/app/                  # Rutas y componentes de servidor
+frontend/src/components/          # Componentes de interfaz y estados interactivos
+frontend/src/domain/               # Tipos y reglas del dominio
+frontend/src/lib/                  # Stores, utilidades y catálogos
+frontend/src/mocks/                # Datos simulados
+frontend/src/services/contracts.ts # Contratos de las operaciones
+frontend/src/services/mock/        # Implementación simulada
+frontend/src/services/http/        # Implementación preparada para la API
+backend/cmd/api/                  # Main del servidor HTTP
+backend/internal/config|db|handler # Config, pool Postgres, rutas
+backend/migrations/               # SQL embebido, se aplica al arrancar
+infra/docker-compose.yml          # Stack web+api+db
 ```
 
 Para conocer la arquitectura completa, consulte [ARCHITECTURE.md](ARCHITECTURE.md). Para definir la API futura, consulte [docs/backend/README.md](docs/backend/README.md).
@@ -115,14 +128,14 @@ Los permisos se pueden consultar y modificar en **Ajustes → Permisos**.
 
 ## 🧑‍💻 Integración con backend
 
-Los contratos y métodos de servicio se encuentran en [src/services/contracts.ts](src/services/contracts.ts). Las implementaciones HTTP están preparadas en [src/services/http](src/services/http), pero actualmente lanzan `NotImplementedError`.
+Los contratos y métodos de servicio se encuentran en [frontend/src/services/contracts.ts](frontend/src/services/contracts.ts). Las implementaciones HTTP están preparadas en [frontend/src/services/http](frontend/src/services/http), pero actualmente lanzan `NotImplementedError`.
 
-Para conectar una API real:
+Para conectar la API real:
 
 1. Configure `NEXT_PUBLIC_DATA_SOURCE=http`.
-2. Configure `NEXT_PUBLIC_API_URL`.
-3. Implementa los métodos de [src/services/http](src/services/http).
-4. Reemplaza los estados iniciales marcados con `// TODO(api)` en [src/lib](src/lib) y [src/lib/lookups.ts](src/lib/lookups.ts).
+2. Configure `NEXT_PUBLIC_API_URL` (`http://api:4000` en compose, `http://localhost:4000` en dev local).
+3. Implementa los métodos de [frontend/src/services/http](frontend/src/services/http).
+4. Reemplaza los estados iniciales marcados con `// TODO(api)` en [frontend/src/lib](frontend/src/lib) y [frontend/src/lib/lookups.ts](frontend/src/lib/lookups.ts).
 
 La documentación de requisitos está disponible en [docs/backend/README.md](docs/backend/README.md).
 
