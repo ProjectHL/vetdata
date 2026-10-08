@@ -7,15 +7,16 @@ Repo backend compilable + migraciones base + seeds desde `frontend/src/mocks/` +
 
 ## Tasks
 - [x] T1-1 Modelo + migraciones + seeds (groups, clinics, users, memberships, doctors, owners, role_permissions)
-- [ ] T1-2 Auth base (cookie httpOnly + refresh rotation, GET /me, recovery stub, solo Activo)
-- [ ] T1-3 Multitenant (tenant desde sesión, clinicId estable, membership por clínica/rol)
-- [ ] T1-4 Convenciones API (REST /api/v1, errores tipados, paginación, envelope)
-- [ ] T1-5 RUT (normalizar + DV módulo 11 + 400)
-- [ ] T1-6 Montos (neto, CLP enteros, IVA 19% único)
-- [ ] T1-7 Fechas (America/Santiago, ISO con offset)
-- [ ] T1-8 IDs (UUID servidor, Idempotency-Key, correlativos por clínica)
-- [ ] T1-9 CI + compose + observabilidad base
-- [ ] T1-10 Horarios (estructura clínica/profesional/feriados, slots configurables)
+- [x] T1-2 Auth base (cookie httpOnly + refresh rotation, GET /me, recovery stub, solo Activo)
+- [x] T1-3 Multitenant (tenant desde sesión, clinicId estable, membership por clínica/rol)
+- [x] T1-4 Convenciones API (REST /api/v1, errores tipados, paginación, envelope)
+- [x] T1-5 RUT (normalizar + DV módulo 11 + 400)
+- [x] T1-6 Montos (neto, CLP enteros, IVA 19% único)
+- [x] T1-7 Fechas (America/Santiago, ISO con offset)
+- [x] T1-8 IDs (UUID servidor, Idempotency-Key, correlativos por clínica)
+- [x] T1-9 CI + compose + observabilidad base
+- [x] T1-10 Horarios (estructura clínica/profesional/feriados, slots configurables)
 
 ## Evidencia
 - T1-1: `backend/migrations/002_fase1_core.sql`, `backend/internal/model/model.go`, `backend/seeds/002_fase1_seeds.sql`, `backend/seeds/seeds_uuid_mapping.md`, `backend/scripts/apply_seeds.sh`. Fix post-delegación: `Invitacion pendiente` → `Invitación pendiente` (igual que `domain/network.ts`). Checks: `go build` OK, `go vet` OK, migración + seeds en PG17 sin errores (1/8/11/11/6/4/43).
+- T1-2..T1-10: validados 2026-10-08 sobre `review/fase-1-validacion` (@ `fa14264`) con suites aisladas `vetdata-tests` / `vetdata-v36` / `vetdata-v710` — T1-2 6/6 PASS, T1-3..T1-6 6 PASS, T1-7..T1-10 7 PASS + `go vet` / `gofmt -l` limpios. Firma humana en `docs/roadmap/cierre-fase-01.md` §Observaciones del desarrollador. Pendiente fuera de alcance: SMTP real vía smoke `verify.yml` con Mailpit.

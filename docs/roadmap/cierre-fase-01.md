@@ -52,4 +52,7 @@ Los proyectos `vetdata-tests` y `vetdata-verify` usan bases efímeras aisladas. 
 
 ## Observaciones del desarrollador
 
-Pendiente de revisión humana. Añadir fecha, escenario, resultado y decisión sin eliminar la evidencia técnica.
+- 2026-10-08 — Revisión humana sobre `review/fase-1-validacion` (@ `fa14264`, base `origin/codex/backend-phases`).
+- Escenario: suites aisladas `vetdata-tests` / `vetdata-v36` / `vetdata-v710` (bases efímeras, sin tocar `vetdata` del usuario); runs `go test` por paquete + `go vet` + `gofmt -l` vacío.
+- Resultado: T1-1 5/5 PASS, T1-2 6/6 PASS, T1-3..T1-6 6 PASS, T1-7..T1-10 7 PASS. Único sub-punto fuera de alcance: SMTP real queda al smoke de `verify.yml` con Mailpit (tests usan doble in-memory); `TestDockerInstallationAndSMTPRecovery` pesado no se corrió aquí.
+- Decisión: se firma el cierre técnico de Fase 1 para desarrollo por API. Límites vigentes (correo público, backups, TLS VPS, 2FA, producción) siguen en sus fases. Se avanza a Fase 2 desde T2-1.
