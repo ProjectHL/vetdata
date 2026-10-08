@@ -6,9 +6,9 @@
 
 Implementar el diferencial de red: el dueño autoriza el acceso y el servidor aplica su alcance en todas las lecturas.
 
-**Dependencia:** Fase 1 validada.
+**Dependencia:** Fase 1 validada técnicamente por API: [acta](cierre-fase-01.md), commit `29f5e3d`.
 
-**Estado inicial:** pendiente. Esta página especifica trabajo futuro; sus pruebas y entregables no están acreditados por existir el documento.
+**Estado:** en curso. Hay implementación parcial y pruebas heredadas; falta completar el cierre. [Preparación ejecutable, brechas y orden de paquetes](ejecucion-fase-02.md). Preparar la fase no equivale a validarla.
 
 ## Paquetes de trabajo
 
@@ -16,16 +16,16 @@ Ejecutar primero contratos y migraciones del paquete, luego reglas/servicios/han
 
 | Tarea | Decisiones / referencia | Estado | Entregable | Evidencia de aceptación |
 |---|---|---|---|---|
-| T2-1 | p-01, p-10 | pendiente | Invitaciones con expiración, roles por clínica, lastAccess y protección del último administrador. Sustituir permisos antiguos por red.suspender restringido a Admin origen. | Intentos concurrentes de retirar el último administrador rechazados; invitaciones de un uso. |
-| T2-2 | p-03, p-04 | pendiente | Completar relaciones dueño-clínica, pacientes, custodia e historial de lectura. Centralizar propio/compartido/ninguno en listas, detalle, búsqueda, agenda, boxes, tareas y analítica. | Ningún camino de lectura expone clínico ajeno sin acceso; se conservan documentos propios. |
-| T2-3 | p-04 | pendiente | Proyección de resumen en servidor; tarjeta mínima sin contacto; límites y registro de búsquedas. | Resumen excluye consultas, exámenes y recetas incluso en respuestas JSON; búsqueda no enumera contactos. |
-| T2-4 | p-05 | pendiente | Solicitud por mascota, correo al dueño, token hasheado de un uso de 72 h, cancelación, expiración, reenvío y renovación vinculada; aviso siete días antes. | Doble respuesta concurrente crea un solo grant; token vencido/reutilizado falla; renovación no amplía acceso por sí sola. |
-| T2-5 | p-06 | pendiente | Dueño verifica RUT y aprueba/deniega con alcance igual o menor. Evidencia por grant y revocación de consentimiento. | Checkbox de clínica no autoriza; revocación corta lecturas y no borra evidencia. |
-| T2-6 | p-10 | pendiente | Suspender/restablecer acceso por Admin origen con motivo, auditoría y aviso al dueño/receptora. | Vet o Admin de otra clínica recibe 403; restablecer no revive consentimiento revocado ni vigencia vencida. |
-| T2-7 | p-07 | pendiente | Auditar lecturas compartidas; consulta por origen y dueño con autorización propia. | Auditoría persiste antes de entregar datos; evidencia aislada y sin token/RUT en logs generales. |
+| T2-1 | p-01, p-10 | en curso | Invitaciones con expiración, roles por clínica, lastAccess y protección del último administrador. Sustituir permisos antiguos por red.suspender restringido a Admin origen. | Intentos concurrentes de retirar el último administrador rechazados; invitaciones de un uso. |
+| T2-2 | p-03, p-04 | en curso | Completar relaciones dueño-clínica, pacientes, custodia e historial de lectura. Centralizar propio/compartido/ninguno en listas, detalle, búsqueda, agenda, boxes, tareas y analítica. | Ningún camino de lectura expone clínico ajeno sin acceso; se conservan documentos propios. |
+| T2-3 | p-04 | en curso | Proyección de resumen en servidor; tarjeta mínima sin contacto; límites y registro de búsquedas. | Resumen excluye consultas, exámenes y recetas incluso en respuestas JSON; búsqueda no enumera contactos. |
+| T2-4 | p-05 | en curso | Solicitud por mascota, correo al dueño, token hasheado de un uso de 72 h, cancelación, expiración, reenvío y renovación vinculada; aviso siete días antes. | Doble respuesta concurrente crea un solo grant; token vencido/reutilizado falla; renovación no amplía acceso por sí sola. |
+| T2-5 | p-06 | en curso | Dueño verifica RUT y aprueba/deniega con alcance igual o menor. Evidencia por grant y revocación de consentimiento. | Checkbox de clínica no autoriza; revocación corta lecturas y no borra evidencia. |
+| T2-6 | p-10 | en curso | Suspender/restablecer acceso por Admin origen con motivo, auditoría y aviso al dueño/receptora. | Vet o Admin de otra clínica recibe 403; restablecer no revive consentimiento revocado ni vigencia vencida. |
+| T2-7 | p-07 | en curso | Auditar lecturas compartidas; consulta por origen y dueño con autorización propia. | Auditoría persiste antes de entregar datos; evidencia aislada y sin token/RUT en logs generales. |
 | T2-8 | p-23 | pendiente | GET /tasks calculado por servidor; asignación y estado por clínica; taskId codificado. | Fuentes disponibles producen tareas reales; permisos filtran bandeja; fuentes futuras se incorporan en fases 3/4. |
-| T2-9 | p-25 | pendiente | Vincular doctor al alta de veterinario y controlar desactivación con citas futuras. | 409 con citas afectadas; reasignación/cancelación explícita previa a desactivar. |
-| T2-10 | p-03 a p-07 | pendiente | Ejecutar escenario de dos clínicas con ficha compartida, consentimiento y vigencia real. | Prueba de extremo a extremo por API, con solicitudes, auditoría y pérdida inmediata de acceso. |
+| T2-9 | p-25 | en curso | Vincular doctor al alta de veterinario y controlar desactivación con citas futuras. | 409 con citas afectadas; reasignación/cancelación explícita previa a desactivar. |
+| T2-10 | p-03 a p-07 | en curso | Ejecutar escenario de dos clínicas con ficha compartida, consentimiento y vigencia real. | Prueba de extremo a extremo por API, con solicitudes, auditoría y pérdida inmediata de acceso. |
 
 ## Contratos e interfaces
 
@@ -55,5 +55,7 @@ Dos clínicas comparten mediante autorización del dueño; proyección y auditor
 ## Dependencias externas y decisiones de implementación
 
 Elegir duración exacta de retención de lecturas antes de habilitar su purga (D-01). Contrato de acceso temporal del dueño y parámetros de reenvío se revisan en T2-4/T2-7; registrar en OpenAPI antes de implementar esos endpoints.
+
+D-14: revisar inicio de vigencia y alcances de renovación anticipada antes de habilitarla. Mantener el avance de los paquetes independientes; ver [preparación ejecutable](ejecucion-fase-02.md).
 
 Los identificadores D se resuelven en el registro del [roadmap](README.md#decisiones-y-dependencias-diferidas). Una tarea pasa a bloqueada solo cuando su ejecución alcanza una dependencia ausente; las restantes pueden avanzar.

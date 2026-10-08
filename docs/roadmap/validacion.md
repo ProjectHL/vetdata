@@ -46,7 +46,7 @@ Suite Docker/Postgres aislada ejecutada con salida 0. [Evidencia, contratos y br
 
 ## Fase 2 — Identidad y acceso entre clínicas
 
-[Paquetes y pruebas](fase-02.md). Gate: **pendiente**.
+[Paquetes y pruebas](fase-02.md). Gate: **en curso**. [Preparación ejecutable](ejecucion-fase-02.md) basada en `29f5e3d`; no se ha cerrado ninguna T2 por esta preparación.
 
 | Aceptada | Tarea | Estado | Evidencia actual / exigida | Revisión y observaciones |
 |---|---|---|---|---|

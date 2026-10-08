@@ -25,6 +25,8 @@ El alcance MVP definido en T0-7 sigue siendo fundaciones, identidad/red, agenda 
 
 ## Preparación y estado observado al crear el roadmap
 
+Siguiente trabajo: [preparación ejecutable de Fase 2](ejecucion-fase-02.md), con paquetes ordenados, brechas de código, matriz de pruebas y decisiones pendientes.
+
 Inventario histórico anterior a la implementación. Para el estado vigente, consultar [avance-backend.md](avance-backend.md) y [validacion.md](validacion.md).
 
 | Elemento | Evidencia del repositorio | Estado / brecha |
@@ -76,6 +78,7 @@ Estas entradas son gates de ejecución; no cambian p-NN ni acreditan aprobación
 | D-11 | NVR/cámaras y conectividad | Operaciones + clínica + dev | T8-4 | Equipo compatible, acceso de prueba, privacidad y retención verificados. |
 | D-12 | Firma avanzada y catálogo diagnóstico | Responsable clínico + producto + dev | T8-5/T8-6 | Validación, proveedor/licencias y entorno de pruebas disponible. |
 | D-13 | Transporte de correo transaccional | Producto + dev | T1-2, reutilizado en fases 2/3 | Capturador local para pruebas; remitente y entrega real antes de cerrar aceptación de correo. |
+| D-14 | Inicio y alcance de una renovación aprobada antes del vencimiento | Producto + dev | T2-4 | Precisar inicio inmediato o sucesivo y tratamiento de alcances distintos. Ver pendientes-dev.md; no activar una regla por suposición. |
 
 Roles personalizados: evaluar en T4-5 y dejar constancia; cuatro roles fijos continúan en MVP salvo nueva decisión explícita. El cierre de una decisión de proveedor exige evidencia, no solo disponer de una interfaz simulada.
 
