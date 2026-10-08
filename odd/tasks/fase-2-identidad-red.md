@@ -6,7 +6,7 @@ Fuente: `docs/TAREAS.md` T2-1..T2-10, `docs/DECISIONES.md` p-01/p-03/p-04/p-05/p
 Usuarios/invitaciones/roles por clínica + regla de acceso owner-driven + solicitudes/consentimiento por email-link + freno `red.suspender` + auditoría. Salida: dos clínicas compartiendo una ficha con vigencia real.
 
 ## Tasks
-- [ ] T2-1 Usuarios/invitaciones/roles (matriz por clínica, invitaciones con expiración, lastAccess, anti-autobloqueo 409; muere `red.aprobar`, nace `red.suspender`)
+- [x] T2-1 Usuarios/invitaciones/roles (matriz por clínica, invitaciones con expiración, lastAccess, anti-autobloqueo 409; muere `red.aprobar`, nace `red.suspender`)
 - [ ] T2-2 Regla acceso en cada lectura (accessLevel + grantStatus derivado)
 - [ ] T2-3 Alcance en servidor (Ficha completa vs Resumen clínico, 404 vs 403, rate-limit + log)
 - [ ] T2-4 Solicitudes owner-driven (link token un solo uso hash 72h, estados, 409, renovar linkeada)
@@ -31,3 +31,4 @@ Rama de trabajo nueva desde `review/fase-1-validacion`. Solo `backend/` + `docs/
 
 ## Progreso
 - 2026-10-08: tracking creado al firmar Fase 1. Siguiente: T2-1.
+- 2026-10-08: T2-1 cerrada sobre `review/fase-1-validacion` — `TestLastAdminAndCrossClinicMembership` + nuevo `TestInviteAcceptSingleUseAndExpiry` (invitar→aceptar→login, reuso 400/409, expirada 400) PASS en suite aislada `vetdata-tests`; `go vet` + `gofmt -l` limpios. Gap cerrado: el flujo de invitación no tenía test dedicado. Frontend con `red.aprobar` queda intacto hasta Fase 5.

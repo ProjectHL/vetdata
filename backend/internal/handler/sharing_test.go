@@ -149,3 +149,42 @@ func TestLastAdminAndCrossClinicMembership(t *testing.T) {
 		t.Fatal(w.Code)
 	}
 }
+func TestInviteAcceptSingleUseAndExpiry(t *testing.T) {
+	f, own, _, _, _ := setupSharing(t)
+	ctx := context.Background()
+	w := f.request("POST", "/api/v1/users/invitations", map[string]string{"name": "Nueva Recepción", "email": "invite@example.test", "role": "Recepción"}, own...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if _, err := f.mail.DeliverOne(ctx); err != nil {
+		t.Fatal(err)
+	}
+	raw := strings.Split(f.sender.messages[len(f.sender.messages)-1].Body, "#token=")[1]
+	w = f.request("POST", "/api/v1/auth/accept-invitation", map[string]string{"token": raw, "password": "Test-password-123"}, own...)
+	if w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/auth/accept-invitation", map[string]string{"token": raw, "password": "Test-password-123"}, own...)
+	if w.Code != 400 && w.Code != 409 {
+		t.Fatal("reused invitation", w.Code)
+	}
+	w = f.request("POST", "/api/v1/auth/login", map[string]string{"email": "invite@example.test", "password": "Test-password-123", "clinicId": f.clinic})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/users/invitations", map[string]string{"name": "Expirada", "email": "expired@example.test", "role": "Recepción"}, own...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if _, err := f.mail.DeliverOne(ctx); err != nil {
+		t.Fatal(err)
+	}
+	expired := strings.Split(f.sender.messages[len(f.sender.messages)-1].Body, "#token=")[1]
+	if _, err := f.pool.Exec(ctx, "UPDATE auth_action_tokens SET expires_at=now()-interval '1 minute' WHERE purpose='invitation' AND used_at IS NULL AND user_id=(SELECT id FROM users WHERE lower(email)='expired@example.test')"); err != nil {
+		t.Fatal(err)
+	}
+	w = f.request("POST", "/api/v1/auth/accept-invitation", map[string]string{"token": expired, "password": "Test-password-123"}, own...)
+	if w.Code != 400 {
+		t.Fatal("expired invitation", w.Code)
+	}
+}
