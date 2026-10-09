@@ -7,6 +7,7 @@ import (
 	"github.com/vetdata/api/internal/model"
 	"golang.org/x/crypto/bcrypt"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -171,8 +172,12 @@ func TestExpiredGrantDeniesRead(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatal(w.Code, w.Body.String())
 	}
-	if _, err := f.pool.Exec(ctx, "UPDATE sharing_grants SET since=(CURRENT_DATE-10),until=(CURRENT_DATE-1) WHERE patient_id=$1 AND granted_to=$2 AND revoked_at IS NULL", pid, f.other); err != nil {
+	tag, err := f.pool.Exec(ctx, "UPDATE sharing_grants SET since='2020-01-01',until='2020-01-02' WHERE patient_id=$1 AND granted_to=$2 AND revoked_at IS NULL", pid, f.other)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if tag.RowsAffected() != 1 {
+		t.Fatal("expiry update", tag.RowsAffected())
 	}
 	w = f.request("GET", "/api/v1/patients/"+pid, nil, other...)
 	if w.Code != 404 {
@@ -182,6 +187,94 @@ func TestExpiredGrantDeniesRead(t *testing.T) {
 	if w.Code != 200 || strings.Contains(w.Body.String(), pid) {
 		t.Fatal("expired listed", w.Code)
 	}
+}
+func TestSharingDuplicatePendingAndRenewal(t *testing.T) {
+	f, own, other, pid, oid := setupSharing(t)
+	ctx := context.Background()
+	newRequest := func(patient string, prev any) *httptest.ResponseRecorder {
+		body := map[string]any{"patientIds": []string{patient}, "scope": "Ficha completa", "reason": "Continuidad clínica"}
+		if prev != nil {
+			body["previousRequestId"] = prev
+		}
+		return f.request("POST", "/api/v1/sharing/requests", body, other...)
+	}
+	w := newRequest(pid, nil)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var qs []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid1 := qs[0]["id"].(string)
+	w = newRequest(pid, nil)
+	if w.Code != 409 || !strings.Contains(w.Body.String(), "pending_request") {
+		t.Fatal("duplicate pending", w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/sharing/requests/"+qid1+"/cancel", map[string]any{}, other...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = newRequest(pid, nil)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid2 := qs[0]["id"].(string)
+	w = f.request("POST", "/api/v1/patients", patientInput{OwnerID: oid, Name: "Second patient", Species: "Gato", Sex: "Hembra", BirthDate: "2021-05-05", Chip: "", Allergies: []string{}}, own...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var p map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &p)
+	pid2 := p["id"].(string)
+	w = newRequest(pid2, nil)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	r1 := qs[0]["id"].(string)
+	w = newRequest(pid2, r1)
+	if w.Code != 409 {
+		t.Fatal("renew pending", w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/sharing/requests/"+r1+"/cancel", map[string]any{}, other...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = newRequest(pid2, r1)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	r2 := qs[0]["id"].(string)
+	var prev *string
+	if err := f.pool.QueryRow(ctx, "SELECT previous_request_id FROM sharing_requests WHERE id=$1", r2).Scan(&prev); err != nil || prev == nil || *prev != r1 {
+		t.Fatal("renewal link", prev, err)
+	}
+	for i := 0; i < 10; i++ {
+		if _, err := f.mail.DeliverOne(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if last := f.sender.messages[len(f.sender.messages)-1].Body; !strings.Contains(last, "Renovación de la solicitud "+r1) {
+		t.Fatal("renewal notice", last)
+	}
+	w = f.request("POST", "/api/v1/sharing/requests/"+r2+"/cancel", map[string]any{}, other...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = newRequest(pid2, qid1)
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "invalid_renewal") {
+		t.Fatal("cross-patient renewal", w.Code, w.Body.String())
+	}
+	w = newRequest(pid2, domain.UUID())
+	if w.Code != 400 || !strings.Contains(w.Body.String(), "invalid_renewal") {
+		t.Fatal("unknown renewal", w.Code, w.Body.String())
+	}
+	w = newRequest(pid2, "no-es-uuid")
+	if w.Code != 400 {
+		t.Fatal("malformed renewal", w.Code, w.Body.String())
+	}
+	_ = qid2
 }
 func TestNetworkSearchMinimalRateLimitAndAudit(t *testing.T) {
 	f, _, other, _, _ := setupSharing(t)

@@ -54,10 +54,10 @@ Prefijo /api/v1. Las rutas de dueño reciben credencial limitada en cuerpo o ses
 | network.search | GET /network/search | RUT validado → tarjetas mínimas | Sesión; rate limit y registro; 400 si RUT inválido. |
 | sharing.listRequests | GET /sharing/requests | Filtros → solicitudes de mi clínica, como solicitante u origen | Sesión y campos autorizados; origen recibe información, no poder de aprobación. |
 | sharing.listGrants | GET /sharing/grants | Filtros → grants con estado derivado | Sesión; solo relación autorizada. |
-| sharing.sendRequests | POST /sharing/requests | patientIds, scope, duration, reason → solicitudes | red.solicitar; 409 propia/duplicada/acceso vigente. Cada solicitud se autoriza por separado. |
+| sharing.sendRequests | POST /sharing/requests | patientIds, scope, duration, reason, previousRequestId opcional → solicitudes | red.solicitar; 409 propia (`own_patient`) / pendiente (`pending_request`) / acceso vigente (`existing_access`). Renovación de a una ficha con enlace a solicitud terminal; aviso de renovación en el correo al dueño; sin reglas de sucesión (el grant nuevo rige desde su aprobación). Cada solicitud se autoriza por separado. |
 | sharing.cancelRequest | POST /sharing/requests/:id/cancel | → solicitud cancelada | Solicitante con red.solicitar; 409 si terminal. Invalida token. |
 | sharing.resendRequest | POST /sharing/requests/:id/resend | → estado de entrega | Solicitante con red.solicitar; límites y reemplazo seguro de token; no extensión silenciosa de las 72 h. |
-| sharing.renewRequest | POST /sharing/requests/:id/renew | scope, duration, reason → nueva solicitud vinculada | Solicitante; nuevo consentimiento obligatorio. Definir activación sin grants superpuestos antes de implementar. |
+| sharing.renewRequest | vía `previousRequestId` en POST /sharing/requests | scope, duration, reason + enlace → nueva solicitud vinculada | Solicitante; nuevo consentimiento obligatorio; sin grants superpuestos (implementado 2026-10-08 en lugar del endpoint dedicado `:id/renew`). |
 | owner.decideRequest | POST /owner/sharing/requests/:id/decision | credencial, rut, decisión, alcance → request y grant opcional | Dueño verificado; 400 RUT inválido, 409 estado/token consumido; alcance superior rechazado. |
 | owner.revokeConsent | POST /owner/sharing/grants/:id/revoke | autorización temporal del dueño → grant revocado | Dueño verificado; invalida consentimiento/grant correspondiente y cachés. |
 | sharing.suspendGrant | POST /sharing/grants/:id/suspend | reason → grant | Admin de origen + red.suspender; 403/409/422. |
@@ -72,7 +72,7 @@ Prefijo /api/v1. Las rutas de dueño reciben credencial limitada en cuerpo o ses
 - AccesoSolicitado entrega correo al dueño con solicitante, mascota, alcance, vigencia y enlace de un uso.
 - Aprobación/denegación informan al solicitante; el origen recibe notificación conforme a p-05.
 - Suspensión/restablecimiento informan al dueño y receptora e incluyen auditoría del actor/motivo.
-- Renovación es nueva solicitud vinculada; aviso siete días antes del vencimiento.
+- Renovación es nueva solicitud vinculada con aviso en el correo al dueño; el aviso proactivo siete días antes del vencimiento queda pendiente de infra de jobs (sin runner en el slice actual).
 - Outbox y operación de dominio se confirman juntos. Reintentar correo no repite grants.
 - Auditoría de lecturas: p-07 establece 2–3 años, exacto pendiente D-01. Auditoría administrativa: cinco años, p-19. Video: treinta días predeterminado. No habilitar purga de una categoría sin política aprobada.
 

@@ -48,6 +48,9 @@ type sharingInput struct {
 	Scope      string   `json:"scope"`
 	Duration   *int     `json:"duration"`
 	Reason     string   `json:"reason"`
+	// Renewal of a terminal request (linked, no succession rules: the new
+	// grant starts at approval date, the previous one keeps its terms).
+	PreviousRequestID *string `json:"previousRequestId"`
 }
 
 func (s *Server) sendRequests(w http.ResponseWriter, r *http.Request) error {
@@ -61,6 +64,9 @@ func (s *Server) sendRequests(w http.ResponseWriter, r *http.Request) error {
 	}
 	if !validScope(in.Scope) || !validDuration(in.Duration) || len(in.PatientIDs) == 0 || len(in.PatientIDs) > 20 || strings.TrimSpace(in.Reason) == "" || len(in.Reason) > 2000 {
 		return fail(400, "invalid_request", "Solicitud inválida")
+	}
+	if in.PreviousRequestID != nil && (len(in.PatientIDs) != 1 || !domain.ValidID(*in.PreviousRequestID)) {
+		return fail(400, "invalid_renewal", "La renovación es de a una ficha con enlace previo válido")
 	}
 	for _, id := range in.PatientIDs {
 		if !domain.ValidID(id) {
@@ -85,6 +91,14 @@ func (s *Server) sendRequests(w http.ResponseWriter, r *http.Request) error {
 			if _, err = tx.Exec(r.Context(), "UPDATE sharing_requests SET status='Expirada' WHERE patient_id=$1 AND requesting_clinic_id=$2 AND status='Esperando dueño' AND expires_at<=now()", pid, a.ClinicID); err != nil {
 				return nil, err
 			}
+			var pending bool
+			err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM sharing_requests WHERE patient_id=$1 AND requesting_clinic_id=$2 AND status='Esperando dueño' AND expires_at>now())`, pid, a.ClinicID).Scan(&pending)
+			if err != nil {
+				return nil, err
+			}
+			if pending {
+				return nil, fail(409, "pending_request", "Ya existe una solicitud pendiente para esta mascota")
+			}
 			var blocked bool
 			err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM sharing_grants WHERE patient_id=$1 AND granted_to=$2 AND revoked_at IS NULL
  AND (suspended_at IS NOT NULL OR until IS NULL OR until>=$3::date))`, pid, a.ClinicID, domain.LocalDate(domain.Now(r.Context()))).Scan(&blocked)
@@ -94,12 +108,30 @@ func (s *Server) sendRequests(w http.ResponseWriter, r *http.Request) error {
 			if blocked {
 				return nil, fail(409, "existing_access", "Ya existe acceso vigente o suspendido")
 			}
+			var prevID any
+			if in.PreviousRequestID != nil {
+				var prevPatient, prevRequester, prevStatus string
+				err := tx.QueryRow(r.Context(), "SELECT patient_id,requesting_clinic_id,status FROM sharing_requests WHERE id=$1", *in.PreviousRequestID).Scan(&prevPatient, &prevRequester, &prevStatus)
+				if err == pgx.ErrNoRows || prevPatient != pid || prevRequester != a.ClinicID {
+					return nil, fail(400, "invalid_renewal", "El enlace previo no corresponde a esta ficha y clínica")
+				}
+				if err != nil {
+					return nil, err
+				}
+				if prevStatus == "Esperando dueño" {
+					return nil, fail(409, "pending_request", "Cancela la solicitud pendiente antes de renovar")
+				}
+				prevID = *in.PreviousRequestID
+			}
 			id, raw := domain.UUID(), token()
-			if _, err = tx.Exec(r.Context(), `INSERT INTO sharing_requests(id,patient_id,requesting_clinic_id,origin_clinic_id,requested_by,reason,scope,duration,token_hash)
- VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)`, id, pid, a.ClinicID, origin, a.UserID, in.Reason, in.Scope, in.Duration, digest(raw)); err != nil {
+			if _, err = tx.Exec(r.Context(), `INSERT INTO sharing_requests(id,patient_id,requesting_clinic_id,origin_clinic_id,requested_by,reason,scope,duration,token_hash,previous_request_id)
+ VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, pid, a.ClinicID, origin, a.UserID, in.Reason, in.Scope, in.Duration, digest(raw), prevID); err != nil {
 				return nil, err
 			}
 			message := notifications.Message{To: email, Subject: "Solicitud de acceso a ficha veterinaria", Body: requester + " solicita acceso a la ficha de " + name + ". Alcance: " + in.Scope + ". Vigencia: " + durationText(in.Duration) + ". El enlace expira en 72 horas.\n" + s.opt.Origin + "/owner/consent#request=" + id + "&token=" + raw}
+			if prevID != nil {
+				message.Body += "\nRenovación de la solicitud " + *in.PreviousRequestID + "."
+			}
 			if err = s.opt.Mail.Enqueue(r.Context(), tx, "sharing:"+id, message); err != nil {
 				return nil, err
 			}
