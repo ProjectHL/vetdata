@@ -79,6 +79,7 @@ func NewWithOptions(pool *pgxpool.Pool, logger *slog.Logger, opt Options) http.H
 	s.operationsRoutes(mux)
 	s.supportRoutes(mux)
 	s.adminRoutes(mux)
+	s.analyticsRoutes(mux)
 	s.route(mux, "/", func(w http.ResponseWriter, r *http.Request) error {
 		return fail(404, "not_found", "Recurso no encontrado")
 	})

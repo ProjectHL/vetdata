@@ -19,7 +19,7 @@ func TestCompleteSeedsReapply(t *testing.T) {
 		if e := seeds.Apply(ctx, p); e != nil {
 			t.Fatal(e)
 		}
-		for table, want := range map[string]int{"owners": 12, "patients": 19, "groups": 8, "clinic_owners": 19} {
+		for table, want := range map[string]int{"owners": 12, "patients": 19, "groups": 9, "clinic_owners": 19} {
 			var got int
 			if e := p.QueryRow(ctx, "SELECT count(*) FROM "+table).Scan(&got); e != nil {
 				t.Fatal(e)
