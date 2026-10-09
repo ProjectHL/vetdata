@@ -85,23 +85,19 @@ Pantallas: `/seguridad/monitoreo` (centro de monitoreo, alarma), `/seguridad/hal
 - Device lock: `locked ↔ unlocked`; alarma `armada ↔ desarmada`.
 Ver [`../estados.md`](../estados.md).
 
-## Operaciones y endpoints sugeridos
+## Operaciones y endpoints
+
+> Estado T4-2 (alcance mínimo decidido con el usuario): implementados eventos + notas + settings. Cámaras/dispositivos/NVR/alarma/streaming quedan fuera — requieren hardware (p-09, Fase 8). `POST /security/audit` del prototipo se retira: la auditoría la genera el servidor (`audit_events` con `security.*`).
+
 | Operación (servicio) | Método y ruta | Entrada | Salida | Permiso | Errores | Auditoría / efectos |
 |---|---|---|---|---|---|---|
-| `security.listCameras` | `GET /api/v1/security/cameras` | `?zone` | `Camera[]` (recomendado incluir `private: bool` calculado) | `seguridad.ver` | 403 | — |
-| `security.setCameraStatus` | `PATCH /api/v1/security/cameras/:id` | `{ status }` | `Camera` | `seguridad.administrar` | 400 (`Sin señal` no asignable), 404 | Auditoría administrativa |
-| `security.listDevices` | `GET /api/v1/security/devices` | — | `Device[]` | `seguridad.ver` | 403 | — |
-| `security.toggleLock` | `POST /api/v1/security/devices/:id/toggle-lock` | — (recomendado `{ locked }`) | `Device` | `seguridad.administrar` | 404, 409 (no es cerradura / sin conexión) | Auditoría; comando al dispositivo |
-| `security.getNvrStorage` | `GET /api/v1/security/nvr` | — | `NvrStorage` | `seguridad.ver` | 403 | — |
-| `security.listEvents` | `GET /api/v1/security/events` | `?status&severity&zone&from&to` | `SecurityEvent[]` | `seguridad.ver` | 403 | — |
-| `security.createEvent` | `POST /api/v1/security/events` | `{ zone, cameraId?, type, severity, note? }` | `SecurityEvent` | `seguridad.ver` (propuesto) | 400 | Evento `EventoSeguridadCreado`; si Crítica → notificación urgente |
-| `security.updateEvent` | `PATCH /api/v1/security/events/:id` | `{ status?, assignee? }` | `SecurityEvent` | `seguridad.ver` (propuesto; ¿`seguridad.administrar` para cerrar?) | 404, 409 (transición) | `resolvedAt`; notificar al asignado |
-| `security.addEventNote` | `POST /api/v1/security/events/:id/notes` | `{ text }` | `SecurityEvent` | `seguridad.ver` (propuesto) | 400 (vacío), 404 | — |
-| `security.listAudit` | `GET /api/v1/security/audit` | `?cameraId&user&from&to&action` | `AuditEntry[]` | `seguridad.administrar` | 403 | — |
-| `security.logAudit` | `POST /api/v1/security/audit` | `{ cameraId, action, reason? }` | `AuditEntry` | según acción: `seguridad.boxes` (`Desactivó privacidad`, `Vio en vivo` en boxes), `seguridad.grabaciones` (`Abrió grabación`, `Exportó clip`), `seguridad.ver` (`Vio en vivo`) | 403, 422 (motivo faltante) | **Recomendación**: reemplazar por auditoría generada al emitir stream/segmento/clip; mantener solo para registrar motivo |
-| `security.getSettings` | `GET /api/v1/security/settings` | — | `SecuritySettings` | `seguridad.ver` | 403 | — |
-| `security.updateSettings` | `PATCH /api/v1/security/settings` | `Partial<SecuritySettings>` (excluir `alarmArmed`) | `SecuritySettings` | `seguridad.administrar` | 400 (retención no permitida, horas inválidas) | Auditoría administrativa; cambio de retención afecta NVR |
-| `security.setAlarm` | `PUT /api/v1/security/alarm` | `{ armed }` | `SecuritySettings` | `seguridad.administrar` | 403 | Auditoría; comando a central de alarma |
+| `security.listEvents` ✅ | `GET /api/v1/security/events` | `?status&severity&zone` | `SecurityEvent[]` con notas | `seguridad.ver` | 400, 403 | — |
+| `security.getEvent` ✅ | `GET /api/v1/security/events/:id` | — | `SecurityEvent` | `seguridad.ver` | 404 cross-tenant | — |
+| `security.createEvent` ✅ | `POST /api/v1/security/events` | `{ zone, cameraRef?, type, severity, note?, linkedEventId? }` | `SecurityEvent` (Nuevo) | `seguridad.ver` | 400 (zona/tipo/severidad), 404 (vinculado) | Evento `security.created` |
+| `security.updateEvent` ✅ | `PATCH /api/v1/security/events/:id` | `{ status?, assignee? }` (`self`, `""` libera, o userId miembro) | `SecurityEvent` | `seguridad.ver` (asignar/pasar a En revisión); `seguridad.administrar` (cerrar) | 400, 404, 409 (cerrado/transición) | `resolvedAt` al cerrar; `security.assigned`/`security.closed`. Cerrado inmutable (p-26) |
+| `security.addEventNote` ✅ | `POST /api/v1/security/events/:id/notes` | `{ text }` | nota | `seguridad.ver` | 400 (vacía), 404, 409 (cerrado) | Pasa Nuevo→En revisión. Evento `security.noted` |
+| `security.getSettings` ✅ | `GET /api/v1/security/settings` | — | settings (defaults en primera lectura) | `seguridad.ver` | 403 | — |
+| `security.updateSettings` ✅ | `PATCH /api/v1/security/settings` | `{ retentionDays?, privacyInBoxes?, afterHoursFrom/To?, autoArm? }` | settings | `seguridad.administrar` | 400 (`alarmArmed` por PATCH, retención, horas) | Evento `security.settings` |
 
 ## Efectos en otros dominios
 - Estado de boxes (agenda-y-atencion) determina privacidad de cámaras.

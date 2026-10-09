@@ -17,6 +17,7 @@ func (s *Server) operationsRoutes(m *http.ServeMux) {
 	s.inventoryRoutes(m)
 	s.billingRoutes(m)
 	s.retailRoutes(m)
+	s.securityRoutes(m)
 	s.referralRoutes(m)
 	s.route(m, "GET /api/v1/appointments", s.listAppointments)
 	s.route(m, "POST /api/v1/appointments", s.createAppointment)
