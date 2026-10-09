@@ -16,12 +16,12 @@ Ejecutar primero contratos y migraciones del paquete, luego reglas/servicios/han
 
 | Tarea | Decisiones / referencia | Estado | Entregable | Evidencia de aceptación |
 |---|---|---|---|---|
-| T4-1 | p-16, p-17, p-24 | pendiente | POS, stock central/sala, transferencias, compras y despachos; reutilizar recepciones y costos reales. | Venta concurrente no produce stock negativo; checkout crea venta/movimientos/despacho juntos. |
-| T4-2 | p-19, p-26 | pendiente | Eventos: ver/anotar con seguridad.ver, cerrar con seguridad.administrar; cierre inmutable y auditoría servidor. | No se edita/reabre evento cerrado; caso nuevo vinculado; auditoría no depende de un POST del navegador. |
-| T4-3 | p-18 | pendiente | Tickets, ideas/votos, releases y admin VetData fuera de tenant; SLA en horas corridas. | Clínica no se hace pasar por Staff; idea y ticket se crean juntos; transiciones autorizadas. |
-| T4-4 | p-21 | pendiente | KPIs servidor, agregados diarios por sector del dueño, k≥5, participación predeterminada anónima y opt-out. | Cortes menores a cinco no se publican; respuestas no llevan fichas/contactos ajenos; exclusión comprobable. |
-| T4-5 | p-10 | pendiente | Evaluar roles personalizados y documentar decisión; mantener cuatro fijos en MVP. | Acta de evaluación; si se difiere, no incluirlo como funcionalidad faltante del MVP. |
-| T4-6 | T4-6 | pendiente | Verificar cobertura de los diez dominios y operaciones autorizadas. | Matriz de rutas, roles, errores y pruebas por dominio completada. |
+| T4-1 | p-16, p-17, p-24 | validada | POS, stock central/sala, transferencias, compras y despachos; reutilizar recepciones y costos reales. | Venta concurrente no produce stock negativo; checkout crea venta/movimientos/despacho juntos. |
+| T4-2 | p-19, p-26 | validada | Eventos: ver/anotar con seguridad.ver, cerrar con seguridad.administrar; cierre inmutable y auditoría servidor. | No se edita/reabre evento cerrado; caso nuevo vinculado; auditoría no depende de un POST del navegador. |
+| T4-3 | p-18 | validada | Tickets, ideas/votos, releases y admin VetData fuera de tenant; SLA en horas corridas. | Clínica no se hace pasar por Staff; idea y ticket se crean juntos; transiciones autorizadas. |
+| T4-4 | p-21 | validada | KPIs servidor, agregados diarios por sector del dueño, k≥5, participación predeterminada anónima y opt-out. | Cortes menores a cinco no se publican; respuestas no llevan fichas/contactos ajenos; exclusión comprobable. |
+| T4-5 | p-10 | evaluada (diferida) | Evaluar roles personalizados y documentar decisión; mantener cuatro fijos en MVP. | Acta de evaluación; si se difiere, no incluirlo como funcionalidad faltante del MVP. |
+| T4-6 | T4-6 | validada | Verificar cobertura de los diez dominios y operaciones autorizadas. | Matriz de rutas, roles, errores y pruebas por dominio completada. |
 
 ## Contratos e interfaces
 

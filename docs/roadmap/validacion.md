@@ -83,12 +83,12 @@ Suite Docker/Postgres aislada ejecutada con salida 0. [Evidencia, contratos y br
 
 | Aceptada | Tarea | Estado | Evidencia actual / exigida | Revisión y observaciones |
 |---|---|---|---|---|
-| [ ] | T4-1 | pendiente | Sin evidencia funcional registrada. Exigir: Venta concurrente no produce stock negativo; checkout crea venta/movimientos/despacho juntos. | Pendiente de revisión. |
-| [ ] | T4-2 | pendiente | Sin evidencia funcional registrada. Exigir: No se edita/reabre evento cerrado; caso nuevo vinculado; auditoría no depende de un POST del navegador. | Pendiente de revisión. |
-| [ ] | T4-3 | pendiente | Sin evidencia funcional registrada. Exigir: Clínica no se hace pasar por Staff; idea y ticket se crean juntos; transiciones autorizadas. | Pendiente de revisión. |
-| [ ] | T4-4 | pendiente | Sin evidencia funcional registrada. Exigir: Cortes menores a cinco no se publican; respuestas no llevan fichas/contactos ajenos; exclusión comprobable. | Pendiente de revisión. |
-| [ ] | T4-5 | pendiente | Sin evidencia funcional registrada. Exigir: Acta de evaluación; si se difiere, no incluirlo como funcionalidad faltante del MVP. | Pendiente de revisión. |
-| [ ] | T4-6 | pendiente | Sin evidencia funcional registrada. Exigir: Matriz de rutas, roles, errores y pruebas por dominio completada. | Pendiente de revisión. |
+| [ ] | T4-1 | pendiente | Implementación y pruebas en [cierre-fase-04.md](cierre-fase-04.md). Exigir: Venta concurrente no produce stock negativo; checkout crea venta/movimientos/despacho juntos. | Pendiente de revisión. |
+| [ ] | T4-2 | pendiente | Implementación y pruebas en [cierre-fase-04.md](cierre-fase-04.md). Exigir: No se edita/reabre evento cerrado; caso nuevo vinculado; auditoría no depende de un POST del navegador. | Pendiente de revisión. |
+| [ ] | T4-3 | pendiente | Implementación y pruebas en [cierre-fase-04.md](cierre-fase-04.md). Exigir: Clínica no se hace pasar por Staff; idea y ticket se crean juntos; transiciones autorizadas. | Pendiente de revisión. |
+| [ ] | T4-4 | pendiente | Implementación y pruebas en [cierre-fase-04.md](cierre-fase-04.md). Exigir: Cortes menores a cinco no se publican; respuestas no llevan fichas/contactos ajenos; exclusión comprobable. | Pendiente de revisión. |
+| [ ] | T4-5 | pendiente | Acta en TAREAS + [cierre-fase-04.md](cierre-fase-04.md). Exigir: Acta de evaluación; si se difiere, no incluirlo como funcionalidad faltante del MVP. | Pendiente de revisión. |
+| [ ] | T4-6 | pendiente | Implementación y pruebas en [cierre-fase-04.md](cierre-fase-04.md). Exigir: Matriz de rutas, roles, errores y pruebas por dominio completada. | Pendiente de revisión. |
 
 ## Fase 5 — Integración frontend
 

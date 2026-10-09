@@ -56,12 +56,12 @@
 
 ## Fase 4 — Tienda + seguridad + soporte + analítica
 
-- [ ] T4-1 Tienda: `checkout` atómico (boleta + kardex sala + 409 si falta + despacho), `transferToSala` atómico, `receiveOrder` a central, todo con permisos `tienda.*`
-- [ ] T4-2 Seguridad p-26 CERRADO: eventos crear/actualizar/nota con `seguridad.ver`, cerrar/falsa-alarma con `seguridad.administrar`, `resolvedAt` inmutable, sin reapertura (evento nuevo linkeado); auditoría append-only generada por servidor al entregar recurso (en vivo, grabación, export con hash), `logAudit` sin POST cliente
-- [ ] T4-3 Soporte p-18: tickets + ideas + `proposeIdea` atómico (idea+ticket), rol `VetData Staff` fuera de tenant + `/admin` mínimo (tickets, ideas, releases, alta clínicas), SLA horas corridas, eliminar `simulateSupportReply` y "Ver como" de prod
-- [ ] T4-4 Analítica p-21 CERRADO: KPIs en servidor, job diario, k≥5, default-on anonimizado con opt-out, base sector dueño, texto VetData, sin fichas/dueños ajenos
+- [x] T4-1 Tienda: `checkout` atómico (boleta + kardex sala + 409 si falta + despacho), `transferToSala` atómico, `receiveOrder` a central, todo con permisos `tienda.*` (concurrencia 2×última unidad → 1×201+1×409, tarifa despacho 3990 bruto)
+- [x] T4-2 Seguridad p-26: eventos crear/actualizar/nota con `seguridad.ver`, cerrar/falsa-alarma con `seguridad.administrar`, `resolvedAt` inmutable sin reapertura; auditoría append-only generada por servidor, sin POST cliente
+- [x] T4-3 Soporte p-18: tickets + ideas + `proposeIdea` atómico, rol `VetData Staff` fuera de tenant + `/admin` mínimo, SLA horas corridas, sin `simulateSupportReply` en prod
+- [x] T4-4 Analítica p-21: KPIs en servidor, job diario, k≥5, default-on anonimizado con opt-out, base sector dueño, texto VetData, sin fichas/dueños ajenos (vacunas, ingresos con `reportes.financiero`, boxes)
 - [x] T4-5 Roles custom p-10: EVALUADO 2026-10-09 — se difiere. MVP sigue con 4 fijos (Admin, Veterinario, Recepción, Farmacia); el ajuste por clínica ya existe vía `role_permissions` (toggle por rol+permiso con `usuarios.administrar` + anti-autobloqueo 409). Roles con nombres nuevos implican matriz UI, validación y riesgo de lockout sin pedido de usuarios: no es faltante del MVP.
-- [ ] T4-6 Salida fase: 10 dominios con endpoints reales y 403 funcionando
+- [x] T4-6 Salida fase: 10 dominios con endpoints reales y 403 funcionando (cierre-fase-04.md)
 
 ## Fase 5 — Integración frontend (la más larga, toda `TODO(api)`)
 

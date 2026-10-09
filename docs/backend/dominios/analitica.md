@@ -1,6 +1,6 @@
 # Analítica (métricas derivadas y series de red)
 
-> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-21: cálculo diario en servidor, k≥5, sector del dueño, default-on anónimo y opt-out; fórmulas/cortes pendientes D-04. No trasladar fichas ajenas al navegador para calcular agregados. Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
+> **Inventario del prototipo con cambios objetivo.** [DECISIONES.md](../../DECISIONES.md) prevalece sobre las reglas inferidas del mock. p-21: cálculo diario en servidor, k≥5, sector del dueño, default-on anónimo y opt-out; fórmulas/cortes pendientes D-04. No trasladar fichas ajenas al navegador para calcular agregados. **Backend implementado en Fase 4** (endpoints `/api/v1/analytics/*`, job diario `analytics_daily`, ver [cierre-fase-04.md](../../roadmap/cierre-fase-04.md)). Ver paquetes y evidencia en el [roadmap](../../roadmap/README.md).
 
 
 > Fuentes: `src/domain/metrics.ts` (`SERVICES_MARGIN`, tipos de series) · `src/services/contracts.ts` (`AnalyticsService`) · `src/services/mock/analytics.ts` · `src/mocks/metrics.ts` (series dummy) · `src/lib/analytics.ts` · `src/lib/metrics/{clinic,customers,day,pharmacy,retail,support}.ts` · `src/components/analytics/*` · `src/components/dashboard/my-day/*`
