@@ -52,7 +52,7 @@
 - [x] T3-6 Pagos p-11: registro manual (abonos parciales, medio, saldo dueño, `Pagada`), pasarela/arqueo después
 - [x] T3-7 Notificaciones slice p-08: capa `notifications` abstracta + email transaccional, solo recordatorio citas, respetar `preferredContact` + opt-out
 - [x] T3-8 Modelo adjuntos p-20: tabla `attachments` que hereda regla red/alcance (implementación S3/cloud/folder diferida)
-- [ ] T3-9 Salida fase: flujo vet completo agenda → atiende → deriva → dispensa → factura
+- [x] T3-9 Salida fase: flujo vet completo agenda → atiende → deriva → dispensa → factura
 
 ## Fase 4 — Tienda + seguridad + soporte + analítica
 
