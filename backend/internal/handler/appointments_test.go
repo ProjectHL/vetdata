@@ -201,6 +201,158 @@ func TestSchedulesConcurrentBookingAndTenant(t *testing.T) {
 	}
 }
 
+func TestAgendaBoxesConcurrencyAndWhitelist(t *testing.T) {
+	f, own, other, pid, _ := setupSharing(t)
+	ctx := context.Background()
+	doctors := make([]string, 2)
+	for i := range doctors {
+		doctors[i] = domain.UUID()
+		if _, e := f.pool.Exec(ctx, "INSERT INTO doctors(id,clinic_id,name,specialty,initials) VALUES($1,$2,'Vet','General','VT')", doctors[i], f.clinic); e != nil {
+			t.Fatal(e)
+		}
+	}
+	now := time.Now().In(domain.Santiago)
+	today := now.Format("2006-01-02")
+	clock := now.Format("15:04")
+	aids := make([]string, 2)
+	for i := range aids {
+		w := f.request("POST", "/api/v1/appointments", appointmentInput{PatientID: pid, DoctorID: doctors[i], Date: today, Time: clock, Reason: "Urgencia", Emergency: true}, own...)
+		if w.Code != 201 {
+			t.Fatal(i, w.Code, w.Body.String())
+		}
+		var ap map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &ap)
+		aids[i] = ap["id"].(string)
+	}
+	wids := make([]string, 2)
+	for i := range wids {
+		w := f.request("POST", "/api/v1/security/waiting", map[string]string{"appointmentId": aids[i]}, own...)
+		if w.Code != 201 {
+			t.Fatal(i, w.Code, w.Body.String())
+		}
+		var arrival struct{ Waiting struct{ ID string } }
+		_ = json.Unmarshal(w.Body.Bytes(), &arrival)
+		wids[i] = arrival.Waiting.ID
+	}
+	w := f.request("POST", "/api/v1/rooms", map[string]string{"name": "Box T3", "kind": "box"}, own...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var room map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &room)
+	rid := room["id"].(string)
+	// Dos llamadas concurrentes al mismo box: una sola prospera.
+	responses := make(chan int, 2)
+	var wg sync.WaitGroup
+	for i := range wids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			responses <- f.request("POST", "/api/v1/security/waiting/"+wids[i]+"/call", map[string]string{"roomId": rid}, own...).Code
+		}()
+	}
+	wg.Wait()
+	close(responses)
+	codes := map[int]int{}
+	for c := range responses {
+		codes[c]++
+	}
+	if codes[200] != 1 || codes[409] != 1 {
+		t.Fatal("concurrent call", codes)
+	}
+	// La espera perdedora sigue pendiente: llamar a box ocupado da 409.
+	// La espera ganadora es la que quedó con box asignado en la base.
+	var winner int = -1
+	for i := range aids {
+		var roomID *string
+		if e := f.pool.QueryRow(ctx, "SELECT room_id FROM appointments WHERE id=$1", aids[i]).Scan(&roomID); e != nil {
+			t.Fatal(e)
+		}
+		if roomID != nil {
+			winner = i
+		}
+	}
+	if winner == -1 {
+		t.Fatal("no winner", codes)
+	}
+	loser := 1 - winner
+	w = f.request("POST", "/api/v1/security/waiting/"+wids[loser]+"/call", map[string]string{"roomId": rid}, own...)
+	if w.Code != 409 {
+		t.Fatal("occupied room", w.Code, w.Body.String())
+	}
+	// Finalización compuesta: cita Realizada + box en limpieza + ocupantes liberados.
+	w = f.request("POST", "/api/v1/rooms/"+rid+"/finish", nil, own...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var done struct {
+		Room        map[string]any `json:"room"`
+		Appointment map[string]any `json:"appointment"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &done)
+	if done.Room["status"] != "limpieza" || done.Room["doctorId"] != nil || done.Room["patientId"] != nil {
+		t.Fatal("finish room", w.Body.String())
+	}
+	if done.Appointment["status"] != "Realizada" || done.Appointment["id"] != aids[winner] {
+		t.Fatal("finish appointment", w.Body.String())
+	}
+	// Lista blanca: solo limpieza -> disponible.
+	w = f.request("PATCH", "/api/v1/rooms/"+rid, map[string]string{"status": "ocupado"}, own...)
+	if w.Code != 409 {
+		t.Fatal("whitelist", w.Code, w.Body.String())
+	}
+	w = f.request("PATCH", "/api/v1/rooms/"+rid, map[string]string{"status": "disponible"}, other...)
+	if w.Code != 404 {
+		t.Fatal("cross tenant room", w.Code)
+	}
+	w = f.request("PATCH", "/api/v1/rooms/"+rid, map[string]string{"status": "disponible"}, own...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("PATCH", "/api/v1/rooms/"+rid, map[string]string{"status": "disponible"}, own...)
+	if w.Code != 409 {
+		t.Fatal("already available", w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/rooms/"+rid+"/finish", nil, own...)
+	if w.Code != 409 {
+		t.Fatal("finish available", w.Code, w.Body.String())
+	}
+	// Historial de ocupación: ocupado -> limpieza -> disponible.
+	var history []string
+	rows, e := f.pool.Query(ctx, "SELECT status FROM room_history WHERE room_id=$1 ORDER BY created_at,id", rid)
+	if e != nil {
+		t.Fatal(e)
+	}
+	for rows.Next() {
+		var st string
+		_ = rows.Scan(&st)
+		history = append(history, st)
+	}
+	rows.Close()
+	if len(history) != 3 || history[0] != "ocupado" || history[1] != "limpieza" || history[2] != "disponible" {
+		t.Fatal(history)
+	}
+	// Check-in solo para citas activas de hoy: una futura da 409.
+	future := now.AddDate(0, 0, 2)
+	schedule := scheduleInput{Hours: []hoursInput{{Weekday: int(future.Weekday()), Start: "09:00", End: "11:00", SlotMinutes: 30}}, Holidays: []holidayInput{}}
+	if w = f.request("PUT", "/api/v1/settings/schedule", schedule, own...); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w = f.request("PUT", "/api/v1/doctors/"+doctors[0]+"/schedule", map[string]any{"hours": []hoursInput{{Weekday: int(future.Weekday()), Start: "09:00", End: "11:00"}}}, own...); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/appointments", appointmentInput{PatientID: pid, DoctorID: doctors[0], Date: future.Format("2006-01-02"), Time: "09:30", Reason: "Control"}, own...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var fut map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &fut)
+	w = f.request("POST", "/api/v1/security/waiting", map[string]string{"appointmentId": fut["id"].(string)}, own...)
+	if w.Code != 409 {
+		t.Fatal("future checkin", w.Code, w.Body.String())
+	}
+}
+
 func TestWaitingRoomLifecycle(t *testing.T) {
 	f, own, other, pid, _ := setupSharing(t)
 	ctx := context.Background()
