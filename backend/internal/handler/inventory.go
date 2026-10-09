@@ -41,7 +41,7 @@ func (s *Server) inventoryRoutes(m *http.ServeMux) {
 	}
 }
 
-const itemSelect = `SELECT c.id,c.name,c.kind,c.price_net AS "priceNet",c.unit_cost AS "unitCost",c.supplier_id AS "supplierId",c.category,c.details,c.min_stock AS "minStock",c.active,
+const itemSelect = `SELECT c.id,c.name,c.kind,c.price_net AS "priceNet",c.unit_cost AS "unitCost",c.supplier_id AS "supplierId",c.category,c.details,c.min_stock AS "minStock",c.active,c.prescription_required AS "prescriptionRequired",
  (SELECT coalesce(sum(qty),0) FROM stock_lots WHERE item_id=c.id) AS stock,
  (SELECT coalesce(jsonb_agg(jsonb_build_object('id',id,'location',location,'lot',lot,'expiry',expiry,'qty',qty,'unitCost',unit_cost) ORDER BY expiry NULLS LAST,id),'[]') FROM stock_lots WHERE item_id=c.id) AS lots FROM catalog_items c`
 const orderSelect = `SELECT p.id,p.number,p.supplier_id AS "supplierId",p.kind,p.status,p.created_at AS "createdAt",
@@ -98,12 +98,13 @@ func (s *Server) createSupplier(w http.ResponseWriter, r *http.Request, sc inven
 }
 
 type itemInput struct {
-	Name       string `json:"name"`
-	PriceNet   int64  `json:"priceNet"`
-	UnitCost   int64  `json:"unitCost"`
-	SupplierID string `json:"supplierId"`
-	Category   string `json:"category"`
-	MinStock   int    `json:"minStock"`
+	Name                 string `json:"name"`
+	PriceNet             int64  `json:"priceNet"`
+	UnitCost             int64  `json:"unitCost"`
+	SupplierID           string `json:"supplierId"`
+	Category             string `json:"category"`
+	MinStock             int    `json:"minStock"`
+	PrescriptionRequired bool   `json:"prescriptionRequired"`
 }
 
 func (s *Server) createItem(w http.ResponseWriter, r *http.Request, sc inventoryScope) error {
@@ -124,7 +125,7 @@ func (s *Server) createItem(w http.ResponseWriter, r *http.Request, sc inventory
 			return nil, e
 		}
 		id := domain.UUID()
-		if _, e := tx.Exec(r.Context(), "INSERT INTO catalog_items(id,clinic_id,kind,name,price_net,unit_cost,supplier_id,category,min_stock) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9)", id, a.ClinicID, sc.ItemKind, in.Name, in.PriceNet, in.UnitCost, in.SupplierID, in.Category, in.MinStock); e != nil {
+		if _, e := tx.Exec(r.Context(), "INSERT INTO catalog_items(id,clinic_id,kind,name,price_net,unit_cost,supplier_id,category,min_stock,prescription_required) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", id, a.ClinicID, sc.ItemKind, in.Name, in.PriceNet, in.UnitCost, in.SupplierID, in.Category, in.MinStock, in.PrescriptionRequired); e != nil {
 			return nil, e
 		}
 		if e := audit(r.Context(), tx, a, "catalog.created", id, in); e != nil {
@@ -339,4 +340,50 @@ func (s *Server) adjustInventory(w http.ResponseWriter, r *http.Request, sc inve
 		}
 		return map[string]any{"id": id, "lotId": in.LotID, "itemId": item, "qty": in.Qty, "reason": in.Reason}, nil
 	})
+}
+
+// deductLots consumes qty units of an item FEFO across lots, locking rows.
+// Each lot carries its own movement row (movement_lot model). It returns
+// 409 when the aggregated stock does not cover the request.
+func deductLots(ctx context.Context, tx pgx.Tx, clinic, item, reason, ref, actor string, qty int) error {
+	rows, err := tx.Query(ctx, "SELECT id,qty FROM stock_lots WHERE item_id=$1 AND clinic_id=$2 AND qty>0 ORDER BY expiry NULLS LAST,id FOR UPDATE", item, clinic)
+	if err != nil {
+		return err
+	}
+	need := qty
+	type allocation struct {
+		lotID string
+		qty   int
+	}
+	var lots []allocation
+	for rows.Next() && need > 0 {
+		var lotID string
+		var have int
+		if err = rows.Scan(&lotID, &have); err != nil {
+			rows.Close()
+			return err
+		}
+		take := have
+		if take > need {
+			take = need
+		}
+		lots = append(lots, allocation{lotID, take})
+		need -= take
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return err
+	}
+	if need > 0 {
+		return fail(409, "insufficient_stock", "Stock insuficiente")
+	}
+	for _, lot := range lots {
+		if _, err = tx.Exec(ctx, "UPDATE stock_lots SET qty=qty-$2 WHERE id=$1", lot.lotID, lot.qty); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, "INSERT INTO inventory_movements(clinic_id,item_id,lot_id,qty,reason,reference_id,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7)", clinic, item, lot.lotID, -lot.qty, reason, ref, actor); err != nil {
+			return err
+		}
+	}
+	return nil
 }

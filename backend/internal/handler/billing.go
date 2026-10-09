@@ -74,11 +74,12 @@ func (s *Server) createInvoice(w http.ResponseWriter, r *http.Request) error {
 		id := domain.UUID()
 		var net int64
 		snapshot := make([]map[string]any, 0, len(in.Lines))
+		var controlled []string
 		for _, line := range in.Lines {
 			var kind, name string
 			var price int64
-			var active bool
-			if err := tx.QueryRow(r.Context(), "SELECT kind,name,price_net,active FROM catalog_items WHERE id=$1 AND clinic_id=$2", line.ItemID, a.ClinicID).Scan(&kind, &name, &price, &active); err != nil {
+			var active, rx bool
+			if err := tx.QueryRow(r.Context(), "SELECT kind,name,price_net,active,prescription_required FROM catalog_items WHERE id=$1 AND clinic_id=$2", line.ItemID, a.ClinicID).Scan(&kind, &name, &price, &active, &rx); err != nil {
 				if err == pgx.ErrNoRows {
 					return nil, fail(404, "unknown_item", "Ítem inexistente")
 				}
@@ -96,47 +97,38 @@ func (s *Server) createInvoice(w http.ResponseWriter, r *http.Request) error {
 			if kind == "service" {
 				continue
 			}
-			// FEFO: consumir lotes por vencimiento con bloqueo de fila.
-			rows, err := tx.Query(r.Context(), "SELECT id,qty FROM stock_lots WHERE item_id=$1 AND clinic_id=$2 AND qty>0 ORDER BY expiry NULLS LAST,id FOR UPDATE", line.ItemID, a.ClinicID)
-			if err != nil {
+			if rx {
+				controlled = append(controlled, line.ItemID)
+			}
+			if err := deductLots(r.Context(), tx, a.ClinicID, line.ItemID, "Venta", id, a.UserID, line.Qty); err != nil {
 				return nil, err
-			}
-			need := line.Qty
-			type allocation struct {
-				lotID string
-				qty   int
-			}
-			var lots []allocation
-			for rows.Next() && need > 0 {
-				var lotID string
-				var have int
-				if err = rows.Scan(&lotID, &have); err != nil {
-					rows.Close()
-					return nil, err
-				}
-				take := have
-				if take > need {
-					take = need
-				}
-				lots = append(lots, allocation{lotID, take})
-				need -= take
-			}
-			rows.Close()
-			if err = rows.Err(); err != nil {
-				return nil, err
-			}
-			if need > 0 {
-				return nil, fail(409, "insufficient_stock", "Stock insuficiente")
-			}
-			for _, lot := range lots {
-				if _, err = tx.Exec(r.Context(), "UPDATE stock_lots SET qty=qty-$2 WHERE id=$1", lot.lotID, lot.qty); err != nil {
-					return nil, err
-				}
-				if _, err = tx.Exec(r.Context(), "INSERT INTO inventory_movements(clinic_id,item_id,lot_id,qty,reason,reference_id,actor_id) VALUES($1,$2,$3,$4,'Venta',$5,$6)", a.ClinicID, line.ItemID, lot.lotID, -lot.qty, id, a.UserID); err != nil {
-					return nil, err
-				}
 			}
 			continue
+		}
+		if len(controlled) > 0 {
+			if in.PatientID == nil {
+				return nil, fail(409, "prescription_patient_required", "El medicamento con receta exige mascota en la factura")
+			}
+			today := domain.LocalDate(domain.Now(r.Context()))
+			consumed := make([]string, 0, len(controlled))
+			for _, item := range controlled {
+				var ref string
+				err := tx.QueryRow(r.Context(), `SELECT r.id::text FROM referrals r WHERE r.clinic_id=$1 AND r.patient_id=$2
+ AND r.status='Dispensada' AND r.expires_on>=$3::date AND r.invoiced_at IS NULL
+ AND r.items @> jsonb_build_array(jsonb_build_object('itemId',$4::text))
+ AND NOT EXISTS(SELECT 1 FROM clinical_records x WHERE x.corrects_id=r.prescription_id AND x.kind IN ('correction','annulment'))`,
+					a.ClinicID, *in.PatientID, today, item).Scan(&ref)
+				if err != nil {
+					if err == pgx.ErrNoRows {
+						return nil, fail(409, "missing_prescription", "Falta derivación dispensada y vigente para ese medicamento")
+					}
+					return nil, err
+				}
+				consumed = append(consumed, ref)
+			}
+			if _, err := tx.Exec(r.Context(), "UPDATE referrals SET invoiced_at=now() WHERE clinic_id=$1 AND id=ANY($2::uuid[])", a.ClinicID, consumed); err != nil {
+				return nil, err
+			}
 		}
 		money, err := domain.MoneyFromNet(net)
 		if err != nil {

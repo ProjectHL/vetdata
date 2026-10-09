@@ -26,6 +26,19 @@ var diagnosisPatterns = []struct {
 	{"Endocrino", regexp.MustCompile(`(?i)tiroid`)},
 }
 
+// writablePatient enforces the clinical write rule: own patients always,
+// shared ones only with full scope. Summary access never writes.
+func writablePatient(ctx context.Context, tx pgx.Tx, a Actor, id string) error {
+	v, err := patientAccess(ctx, tx, a, id)
+	if err != nil {
+		return err
+	}
+	if v.Level != "propio" && !(v.Level == "compartido" && v.Scope == "Ficha completa") {
+		return fail(403, "forbidden_write", "El alcance no permite registrar en esta ficha")
+	}
+	return nil
+}
+
 func diagnosisCategory(diagnosis string) string {
 	for _, c := range diagnosisPatterns {
 		if c.re.MatchString(diagnosis) {
@@ -169,12 +182,8 @@ func (s *Server) createRecord(w http.ResponseWriter, r *http.Request) error {
 		return fail(400, "invalid_kind", "Tipo de registro inválido")
 	}
 	return s.mutate(w, r, a, "ficha.editar", in, 201, func(tx pgx.Tx, a Actor) (any, error) {
-		v, err := patientAccess(r.Context(), tx, a, id)
-		if err != nil {
+		if err := writablePatient(r.Context(), tx, a, id); err != nil {
 			return nil, err
-		}
-		if v.Level != "propio" && !(v.Level == "compartido" && v.Scope == "Ficha completa") {
-			return nil, fail(403, "forbidden_write", "El alcance no permite registrar en esta ficha")
 		}
 		payload, err := validateRecordPayload(r.Context(), in.Kind, in.Payload)
 		if err != nil {

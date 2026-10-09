@@ -100,9 +100,9 @@ Ver [`../estados.md`](../estados.md).
 | `pharmacy.createPurchaseOrder` | `POST /api/v1/pharmacy/purchase-orders` | `{ supplierId, items:[{medicationId, qty>0}] }` | `PurchaseOrder` (Borrador) | `farmacia.inventario` | 400, 404 | — |
 | `pharmacy.sendPurchaseOrder` | `POST /api/v1/pharmacy/purchase-orders/:id/send` | — | `PurchaseOrder` | `farmacia.inventario` | 404, 409 | Envío real al proveedor no existe (`#p-08`) |
 | `pharmacy.receivePurchaseOrder` | `POST /api/v1/pharmacy/purchase-orders/:id/receive` | — (futuro: cantidades/lotes recibidos) | `PurchaseOrder` | `farmacia.inventario` | 404, 409 | Atómico con kardex. Evento `OCRecibida` |
-| `referrals.list` | `GET /api/v1/referrals` | `?status&destination&patientId` | `Referral[]` (de mi clínica; las dirigidas a mí desde otra clínica: ver notas) | sesión | 401 | — |
-| `referrals.create` | `POST /api/v1/referrals` | `NewReferral` (status ignorado → `Enviada`) | `Referral` | `medicamentos.derivar` | 400, 403 (sin acceso a la mascota) | Evento `RecetaDerivada` (a farmacia interna o clínica destino) |
-| `referrals.dispense` | `POST /api/v1/referrals/:id/dispense` | — | `Referral` | `farmacia.dispensar` | 404, 409 (externa, ya dispensada, sin stock) | Atómico con kardex. Evento `RecetaDispensada` |
+| `referrals.list` | `GET /api/v1/pharmacy/referrals` | — | `Referral[]` de la clínica (bandeja recibida externa pendiente D-02) | `farmacia.dispensar` | 401, 403 | — |
+| `referrals.create` | `POST /api/v1/pharmacy/referrals` | `{patientId, prescriptionId, items:[{itemId, qty}], expiresOn?}` (default +30 días) | `Referral` Enviada | `medicamentos.derivar` | 400, 403 (sin acceso), 404, 409 (no medicamento/inactivo) | Evento `referral.created`; actor = firma simple |
+| `referrals.dispense` | `POST /api/v1/pharmacy/referrals/:id/dispense` | — | `Referral` Dispensada | `farmacia.dispensar` | 404, 409 (vencida, anulada, ya dispensada, sin stock) | Atómico FEFO con kardex `Dispensación` por lote (movement_lot). Evento `referral.dispensed` |
 
 ## Efectos en otros dominios
 - Factura (clínica) genera salidas `Venta`.
@@ -113,6 +113,6 @@ Ver [`../estados.md`](../estados.md).
 Medicamentos (`src/mocks/medications.ts`), proveedores, OCs y movimientos semilla (`src/mocks/pharmacy.ts`), derivaciones (`src/mocks/referrals.ts`), categorías `MedCategory`.
 
 ## Notas para el dev
-- Derivación a otra clínica: no está definido cómo la ve la clínica de destino (no hay `referrals` recibidas ni operación de recibir). `#p-13`.
-- Medicamentos controlados/receta retenida y firma electrónica del prescriptor no existen (`#p-13`).
+- Derivación a otra clínica: no está definido cómo la ve la clínica de destino (no hay `referrals` recibidas ni operación de recibir). `#p-13`, D-02 abierto; T3-5 cubre farmacia interna.
+- Receta controlada: `catalog_items.prescription_required` (migración 006); facturar exige derivación Dispensada vigente por mascota e ítem (una factura por derivación vía `invoiced_at`). Firma = usuario autenticado (actor en derivación, dispensación y auditoría); sin firma electrónica (`#p-13`).
 - Un lote por medicamento: para vencimientos reales se necesita stock por lote (FEFO).
