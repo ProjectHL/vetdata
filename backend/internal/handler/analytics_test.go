@@ -52,6 +52,299 @@ func seedAnalyticsConsultation(t *testing.T, f *fixture, clinicID, sector, diagn
 	seedAnalyticsRecord(t, f, pid, clinicID, diagnosis, createdAt)
 }
 
+// seedAnalyticsVaccine registra una vacuna (kind=vaccine) para el paciente.
+// nextDose vacío = vigente sin refuerzo programado.
+func seedAnalyticsVaccine(t *testing.T, f *fixture, pid, clinicID, name, nextDose string) {
+	t.Helper()
+	payload := map[string]string{"name": name, "date": "2026-01-01"}
+	if nextDose != "" {
+		payload["nextDose"] = nextDose
+	}
+	raw, _ := json.Marshal(payload)
+	if _, err := f.pool.Exec(context.Background(), `INSERT INTO clinical_records(patient_id,clinic_id,actor_id,kind,payload)
+	 VALUES($1,$2,$3,'vaccine',$4)`, pid, clinicID, f.user, raw); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// grantFinanciero otorga reportes.financiero al Admin de la clínica propia.
+func grantFinanciero(t *testing.T, f *fixture) {
+	t.Helper()
+	if _, err := f.pool.Exec(context.Background(), "INSERT INTO role_permissions(clinic_id,role,permission) VALUES($1,'Admin','reportes.financiero') ON CONFLICT DO NOTHING", f.clinic); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func analyticsCut(t *testing.T, f *fixture, path string, cookies []*http.Cookie) []map[string]any {
+	t.Helper()
+	w := f.request("GET", path, nil, cookies...)
+	if w.Code != 200 {
+		t.Fatal(path, w.Code, w.Body.String())
+	}
+	var out []map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(path, err)
+	}
+	return out
+}
+
+func analyticsByKey(out []map[string]any, key string) map[string]map[string]any {
+	m := map[string]map[string]any{}
+	for _, row := range out {
+		m[row[key].(string)] = row
+	}
+	return m
+}
+
+func TestAnalyticsVaccineCoverage(t *testing.T) {
+	f := newFixture(t)
+	own := f.login(t)
+	future := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+	past := time.Now().AddDate(-1, 0, 0).Format("2006-01-02")
+	// Mi clínica: un Perro al día, un Perro vencido, un Gato vigente sin nextDose.
+	p1 := seedAnalyticsPatient(t, f, f.clinic, "Norte")
+	seedAnalyticsVaccine(t, f, p1, f.clinic, "Antirrábica", future)
+	p2 := seedAnalyticsPatient(t, f, f.clinic, "Norte")
+	seedAnalyticsVaccine(t, f, p2, f.clinic, "Antirrábica", past)
+	p3 := seedAnalyticsPatient(t, f, f.clinic, "Norte")
+	if _, err := f.pool.Exec(context.Background(), "UPDATE patients SET species='Gato' WHERE id=$1", p3); err != nil {
+		t.Fatal(err)
+	}
+	seedAnalyticsVaccine(t, f, p3, f.clinic, "Leucemia", "")
+
+	out := analyticsCut(t, f, "/api/v1/analytics/vaccine-coverage", own)
+	m := analyticsByKey(out, "species")
+	if m["Perro"]["clinica"] != 50.0 {
+		t.Fatal("Perro clinica debe ser 50", out)
+	}
+	if m["Gato"]["clinica"] != 100.0 {
+		t.Fatal("Gato sin nextDose es vigente", out)
+	}
+	if m["Perro"]["red"] != nil || m["Gato"]["red"] != nil {
+		t.Fatal("red con <5 pacientes debe suprimirse", out)
+	}
+	// 5 pacientes vigentes de otra clínica adherida → red publicada (7 distintos).
+	for i := 0; i < 5; i++ {
+		pid := seedAnalyticsPatient(t, f, f.other, "Norte")
+		seedAnalyticsVaccine(t, f, pid, f.other, "Antirrábica", future)
+	}
+	out = analyticsCut(t, f, "/api/v1/analytics/vaccine-coverage", own)
+	m = analyticsByKey(out, "species")
+	red, ok := m["Perro"]["red"].(float64)
+	if !ok || red < 85.7 || red > 85.72 {
+		t.Fatal("red Perro debe ser 6/7*100", out)
+	}
+	if m["Gato"]["red"] != nil {
+		t.Fatal("Gato en red sigue bajo k=5", out)
+	}
+	if w := f.request("GET", "/api/v1/analytics/vaccine-coverage", nil); w.Code != 401 {
+		t.Fatal("coverage requiere sesión", w.Code)
+	}
+}
+
+func TestAnalyticsCoverageByVaccine(t *testing.T) {
+	f := newFixture(t)
+	own := f.login(t)
+	future := time.Now().AddDate(1, 0, 0).Format("2006-01-02")
+	past := time.Now().AddDate(-1, 0, 0).Format("2006-01-02")
+	p1 := seedAnalyticsPatient(t, f, f.clinic, "Norte")
+	seedAnalyticsVaccine(t, f, p1, f.clinic, "Antirrábica", future)
+	seedAnalyticsVaccine(t, f, p1, f.clinic, "Leucemia", future)
+	p2 := seedAnalyticsPatient(t, f, f.clinic, "Norte")
+	seedAnalyticsVaccine(t, f, p2, f.clinic, "Antirrábica", past)
+
+	out := analyticsCut(t, f, "/api/v1/analytics/coverage-by-vaccine", own)
+	m := analyticsByKey(out, "vaccine")
+	if m["Antirrábica"]["clinica"] != 50.0 {
+		t.Fatal("Antirrábica clinica debe ser 50", out)
+	}
+	if m["Leucemia"]["clinica"] != 100.0 {
+		t.Fatal("Leucemia clinica debe ser 100", out)
+	}
+	if m["Antirrábica"]["red"] != nil {
+		t.Fatal("red bajo k=5 debe suprimirse", out)
+	}
+	for i := 0; i < 5; i++ {
+		pid := seedAnalyticsPatient(t, f, f.other, "Norte")
+		seedAnalyticsVaccine(t, f, pid, f.other, "Antirrábica", future)
+	}
+	out = analyticsCut(t, f, "/api/v1/analytics/coverage-by-vaccine", own)
+	m = analyticsByKey(out, "vaccine")
+	red, ok := m["Antirrábica"]["red"].(float64)
+	if !ok || red < 85.7 || red > 85.72 {
+		t.Fatal("red Antirrábica debe ser 6/7*100", out)
+	}
+	if m["Leucemia"]["red"] != nil {
+		t.Fatal("Leucemia en red sigue bajo k=5", out)
+	}
+}
+
+func TestAnalyticsRevenueGuards(t *testing.T) {
+	f := newFixture(t)
+	grantFinanciero(t, f)
+	own := f.login(t)
+	recep := f.loginAs(t, "Recepción")
+	for _, path := range []string{
+		"/api/v1/analytics/monthly-revenue",
+		"/api/v1/analytics/revenue-by-line",
+		"/api/v1/analytics/box-occupancy",
+	} {
+		if w := f.request("GET", path, nil, recep...); w.Code != 403 {
+			t.Fatal(path, "recepción sin reportes.financiero debe ser 403", w.Code)
+		}
+		if w := f.request("GET", path, nil); w.Code != 401 {
+			t.Fatal(path, "requiere sesión", w.Code)
+		}
+	}
+	// Ingresos del mes: factura (servicio 5000 + medicamento 3000) + boleta 2000.
+	ctx := context.Background()
+	pid := seedAnalyticsPatient(t, f, f.clinic, "Norte")
+	var oid string
+	if err := f.pool.QueryRow(ctx, "SELECT owner_id FROM patients WHERE id=$1", pid).Scan(&oid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, "INSERT INTO clinic_owners(clinic_id,owner_id) VALUES($1,$2)", f.clinic, oid); err != nil {
+		t.Fatal(err)
+	}
+	invMoney, err := domain.MoneyFromNet(8000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	items := `[{"kind":"service","name":"Consulta","qty":1,"priceNet":5000,"discount":0,"lineNet":5000},{"kind":"medication","name":"Amoxicilina","qty":1,"priceNet":3000,"discount":0,"lineNet":3000}]`
+	if _, err := f.pool.Exec(ctx, `INSERT INTO invoices(id,clinic_id,owner_id,patient_id,number,net,vat,total,items,actor_id)
+	 VALUES($1,$2,$3,$4,1,$5,$6,$7,$8,$9)`, domain.UUID(), f.clinic, oid, pid, invMoney.Net, invMoney.VAT, invMoney.Total, items, f.user); err != nil {
+		t.Fatal(err)
+	}
+	retMoney, err := domain.MoneyFromNet(2000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `INSERT INTO retail_sales(id,clinic_id,number,owner_id,payment,delivery_fee_net,net,vat,total,actor_id)
+	 VALUES($1,$2,1,$3,'Efectivo',0,$4,$5,$6,$7)`, domain.UUID(), f.clinic, oid, retMoney.Net, retMoney.VAT, retMoney.Total, f.user); err != nil {
+		t.Fatal(err)
+	}
+	// Mes anterior: factura de servicios 7000. Otra clínica no suma.
+	prevFirst := time.Date(time.Now().Year(), time.Now().Month(), 1, 0, 0, 0, 0, time.UTC).AddDate(0, -1, 0)
+	prevAt := prevFirst.AddDate(0, 0, 15).Add(12 * time.Hour)
+	prevMoney, err := domain.MoneyFromNet(7000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `INSERT INTO invoices(id,clinic_id,owner_id,patient_id,number,net,vat,total,items,actor_id,created_at)
+	 VALUES($1,$2,$3,$4,2,$5,$6,$7,'[{"kind":"service","name":"Control","qty":1,"priceNet":7000,"discount":0,"lineNet":7000}]',$8,$9)`,
+		domain.UUID(), f.clinic, oid, pid, prevMoney.Net, prevMoney.VAT, prevMoney.Total, f.user, prevAt); err != nil {
+		t.Fatal(err)
+	}
+	opid := seedAnalyticsPatient(t, f, f.other, "Norte")
+	var ooid string
+	if err := f.pool.QueryRow(ctx, "SELECT owner_id FROM patients WHERE id=$1", opid).Scan(&ooid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, "INSERT INTO clinic_owners(clinic_id,owner_id) VALUES($1,$2)", f.other, ooid); err != nil {
+		t.Fatal(err)
+	}
+	bigMoney, err := domain.MoneyFromNet(999000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.pool.Exec(ctx, `INSERT INTO invoices(id,clinic_id,owner_id,number,net,vat,total,items,actor_id)
+	 VALUES($1,$2,$3,1,$4,$5,$6,'[]',$7)`, domain.UUID(), f.other, ooid, bigMoney.Net, bigMoney.VAT, bigMoney.Total, f.user); err != nil {
+		t.Fatal(err)
+	}
+
+	now := time.Now()
+	curKey := domain.LocalDate(now)[:7]
+	prevKey := domain.LocalDate(prevAt)[:7]
+	out := analyticsCut(t, f, "/api/v1/analytics/monthly-revenue", own)
+	if len(out) != 6 {
+		t.Fatal("default months=6", len(out), out)
+	}
+	byMonth := analyticsByKey(out, "month")
+	if byMonth[curKey]["ingresos"] != 10000.0 {
+		t.Fatal("mes actual = factura + boleta", out)
+	}
+	if byMonth[prevKey]["ingresos"] != 7000.0 {
+		t.Fatal("mes anterior solo factura servicios", out)
+	}
+	var total float64
+	for _, row := range out {
+		total += row["ingresos"].(float64)
+	}
+	if total != 17000.0 {
+		t.Fatal("otra clínica no suma", out)
+	}
+
+	lines := analyticsCut(t, f, "/api/v1/analytics/revenue-by-line", own)
+	lm := analyticsByKey(lines, "month")
+	if lm[curKey]["servicios"] != 5000.0 || lm[curKey]["farmacia"] != 3000.0 || lm[curKey]["tienda"] != 2000.0 {
+		t.Fatal("apertura por línea del mes", lines)
+	}
+	if lm[prevKey]["servicios"] != 7000.0 || lm[prevKey]["farmacia"] != 0.0 || lm[prevKey]["tienda"] != 0.0 {
+		t.Fatal("mes anterior solo servicios", lines)
+	}
+	if w := f.request("GET", "/api/v1/analytics/monthly-revenue?months=7", nil, own...); w.Code != 400 {
+		t.Fatal("months=7 debe ser 400", w.Code)
+	}
+	if w := f.request("GET", "/api/v1/analytics/monthly-revenue?months=3", nil, own...); w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	} else {
+		var three []map[string]any
+		if err := json.Unmarshal(w.Body.Bytes(), &three); err != nil || len(three) != 3 {
+			t.Fatal("months=3", w.Body.String())
+		}
+	}
+}
+
+func TestAnalyticsBoxOccupancy(t *testing.T) {
+	f := newFixture(t)
+	grantFinanciero(t, f)
+	own := f.login(t)
+	ctx := context.Background()
+	boxA, boxB, comun := domain.UUID(), domain.UUID(), domain.UUID()
+	for _, rr := range []struct {
+		id, name, kind string
+	}{{boxA, "Box A", "box"}, {boxB, "Box B", "box"}, {comun, "Sala común", "comun"}} {
+		if _, err := f.pool.Exec(ctx, "INSERT INTO rooms(id,clinic_id,name,kind) VALUES($1,$2,$3,$4)", rr.id, f.clinic, rr.name, rr.kind); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// Box A: 3 ocupado + 1 disponible en ventana → 75.0; historial viejo no cuenta.
+	for i := 0; i < 3; i++ {
+		if _, err := f.pool.Exec(ctx, "INSERT INTO room_history(clinic_id,room_id,status) VALUES($1,$2,'ocupado')", f.clinic, boxA); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := f.pool.Exec(ctx, "INSERT INTO room_history(clinic_id,room_id,status) VALUES($1,$2,'disponible')", f.clinic, boxA); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().AddDate(0, 0, -20)
+	for i := 0; i < 5; i++ {
+		if _, err := f.pool.Exec(ctx, "INSERT INTO room_history(clinic_id,room_id,status,created_at) VALUES($1,$2,'ocupado',$3)", f.clinic, boxA, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := analyticsCut(t, f, "/api/v1/analytics/box-occupancy", own)
+	m := analyticsByKey(out, "box")
+	if m["Box A"]["ocupacion"] != 75.0 {
+		t.Fatal("Box A debe ser 75.0", out)
+	}
+	if v, ok := m["Box B"]; ok && v["ocupacion"] != 0.0 {
+		t.Fatal("Box B sin historia debe ser 0 o ausente", out)
+	}
+	if _, ok := m["Sala común"]; ok {
+		t.Fatal("salas kind=comun se excluyen", out)
+	}
+	today := domain.LocalDate(time.Now())
+	from := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
+	out = analyticsCut(t, f, "/api/v1/analytics/box-occupancy?from="+from+"&to="+today, own)
+	if analyticsByKey(out, "box")["Box A"]["ocupacion"] != 75.0 {
+		t.Fatal("ventana explícita", out)
+	}
+	if w := f.request("GET", "/api/v1/analytics/box-occupancy?from=no-fecha", nil, own...); w.Code != 400 {
+		t.Fatal("from inválido debe ser 400", w.Code)
+	}
+}
+
 func loginOtherAnalytics(t *testing.T, f *fixture) []*http.Cookie {
 	t.Helper()
 	ctx := context.Background()
@@ -241,6 +534,7 @@ func TestAnalyticsOptOutExcluded(t *testing.T) {
 func TestAnalyticsNoIdentifiableData(t *testing.T) {
 	f := newFixture(t)
 	own := f.login(t)
+	grantFinanciero(t, f)
 	now := time.Now()
 	for i := 0; i < 5; i++ {
 		seedAnalyticsConsultation(t, f, f.other, "Norte", "dermatitis alérgica", now.Add(-time.Hour))
@@ -260,6 +554,11 @@ func TestAnalyticsNoIdentifiableData(t *testing.T) {
 		"/api/v1/analytics/network-alerts",
 		"/api/v1/analytics/monthly-consults",
 		"/api/v1/analytics/opt-out",
+		"/api/v1/analytics/vaccine-coverage",
+		"/api/v1/analytics/coverage-by-vaccine",
+		"/api/v1/analytics/monthly-revenue",
+		"/api/v1/analytics/revenue-by-line",
+		"/api/v1/analytics/box-occupancy",
 	} {
 		w := f.request("GET", path, nil, own...)
 		if w.Code != 200 {
