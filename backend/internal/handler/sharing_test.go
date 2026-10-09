@@ -188,6 +188,73 @@ func TestExpiredGrantDeniesRead(t *testing.T) {
 		t.Fatal("expired listed", w.Code)
 	}
 }
+func lastToken(t *testing.T, f *fixture, ctx context.Context) string {
+	t.Helper()
+	for i := 0; i < 10; i++ {
+		if _, err := f.mail.DeliverOne(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := len(f.sender.messages) - 1; i >= 0; i-- {
+		if body := f.sender.messages[i].Body; strings.Contains(body, "&token=") {
+			return strings.Split(body, "&token=")[1]
+		}
+	}
+	t.Fatal("no token mail")
+	return ""
+}
+func TestOwnerDecisionDeniesAndRecordsEvidence(t *testing.T) {
+	f, own, other, pid, oid := setupSharing(t)
+	ctx := context.Background()
+	decide := func(qid, token string, approve bool, scope string) *httptest.ResponseRecorder {
+		return f.request("POST", "/api/v1/owner/sharing/requests/"+qid+"/decision", map[string]any{"token": token, "rut": "12345678-5", "approve": approve, "scope": scope})
+	}
+	w := f.request("POST", "/api/v1/sharing/requests", sharingInput{PatientIDs: []string{pid}, Scope: "Ficha completa", Reason: "Continuidad clínica"}, other...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var qs []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid := qs[0]["id"].(string)
+	raw := lastToken(t, f, ctx)
+	w = decide(qid, raw, false, "")
+	if w.Code != 200 || !strings.Contains(w.Body.String(), "Denegada") {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var grants int
+	if err := f.pool.QueryRow(ctx, "SELECT count(*) FROM sharing_grants WHERE patient_id=$1", pid).Scan(&grants); err != nil || grants != 0 {
+		t.Fatal("denied grant", grants, err)
+	}
+	w = decide(qid, raw, true, "Ficha completa")
+	if w.Code != 409 {
+		t.Fatal("decided twice", w.Code)
+	}
+	w = f.request("POST", "/api/v1/patients", patientInput{OwnerID: oid, Name: "Evidence patient", Species: "Perro", Sex: "Macho", BirthDate: "2019-03-03", Chip: "", Allergies: []string{"polen"}}, own...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var p map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &p)
+	pid2 := p["id"].(string)
+	w = f.request("POST", "/api/v1/sharing/requests", sharingInput{PatientIDs: []string{pid2}, Scope: "Ficha completa", Reason: "Continuidad clínica"}, other...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid2 := qs[0]["id"].(string)
+	raw2 := lastToken(t, f, ctx)
+	w = decide(qid2, raw2, true, "Resumen clínico")
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var scope, method, ip string
+	if err := f.pool.QueryRow(ctx, "SELECT scope,consent_method,consent_ip::text FROM sharing_grants WHERE patient_id=$1", pid2).Scan(&scope, &method, &ip); err != nil {
+		t.Fatal(err)
+	}
+	if scope != "Resumen clínico" || method != "email-link" || ip == "" {
+		t.Fatal("consent evidence", scope, method, ip)
+	}
+}
 func TestSharingDuplicatePendingAndRenewal(t *testing.T) {
 	f, own, other, pid, oid := setupSharing(t)
 	ctx := context.Background()
