@@ -99,7 +99,7 @@ Unicidad: (`doctorId`, `date`, `time`) entre citas **no canceladas**. Fuente: `c
 | `llegada:<apptId>` | Clínica | Llegada esperada de hoy | Media | `agenda.gestionar` | `security.checkIn` |
 | `vacuna:<patientId>` | Clínica | Mascota visible con vacuna vencida y sin recordatorio | Media | `agenda.gestionar` | `tasks.sendReminder` |
 | `factura:<invoiceId>` | Clínica | Factura `Emitida` (impaga) | Baja | `facturas.emitir` | — |
-| `solicitud:<reqId>` (prototipo; sustituir) | Red | Seguimiento de solicitud Esperando dueño, no aprobación por clínica | Según vencimiento/entrega, definir en T2-8 | `red.solicitar` para solicitante | No permite decidir en nombre del dueño |
+| `solicitud:<reqId>` | Red | Seguimiento de solicitud Esperando dueño de mi clínica (origen solo notificado, no aprueba) | Alta si vence en 24 h, si no Media | `red.solicitar` para solicitante | No permite decidir en nombre del dueño |
 | `receta:<refId>` | Farmacia | Derivación a farmacia interna no dispensada | Alta | `farmacia.dispensar` | `referrals.dispense` (si hay stock) |
 | `stockmed:<medId>` | Farmacia | Stock bajo/sin stock y sin OC abierta | Alta si 0, si no Media | `farmacia.inventario` | — |
 | `ocfar:<poId>` | Farmacia | OC farmacia `Enviada` | Baja | `farmacia.inventario` | `pharmacy.receivePurchaseOrder` |
@@ -133,9 +133,8 @@ Detalle y quién ejecuta en [`../estados.md`](../estados.md).
 | `security.listWaiting` | `GET /api/v1/security/waiting` | — | `WaitingEntry[]` | sesión | 401 | — |
 | `security.checkIn` | `POST /api/v1/security/waiting` | `{ appointmentId }` | `{ access, waiting }` | `agenda.gestionar` | 404, 409 (no es de hoy, ya llegó, cita no activa) | Atómico. Si aforo excedido → evento de seguridad |
 | `security.callFromWaiting` | `POST /api/v1/security/waiting/:id/call` | `{ roomId }` | `{ room }` | `agenda.gestionar` | 404, 409 (box no disponible / no es box) | Atómico: box ocupado + sale de espera. Cámara del box entra en privacidad |
-| `tasks.listMeta` | `GET /api/v1/tasks/meta` | — | `Record<taskId, TaskMeta>` | sesión | 401 | — |
-| `tasks.assign` | `PUT /api/v1/tasks/:taskId/assignee` | `{ assignee?: userId }` | `TaskMeta` | sesión + permiso de la tarea (propuesto) | 400 (usuario de otra clínica) | Evento `TareaAsignada` (notificar al asignado) |
-| `tasks.complete` | `PUT /api/v1/tasks/:taskId/done` | `{ done }` | `TaskMeta` | sesión + permiso de la tarea (propuesto) | — | — |
+| `tasks.list` | `GET /api/v1/tasks?view=all\|open\|mine\|done` | `?view` (defecto `open`) | `Task[]` calculadas en servidor (fuentes T2-8: solicitudes + llegadas de hoy; el resto en fases 3/4) con meta fusionada | sesión; filtra por permiso de cada tarea | 400 (vista inválida) | — |
+| `tasks.update` | `PATCH /api/v1/tasks/:taskId` (`:` URL-encode) | `{ assignee?: userId\|null, done?: bool }` (parcial) | `{ id, assignee, done }` | sesión + permiso de la tarea | 400 (tarea o responsable inválido), 403 | `task.updated` |
 | `tasks.listReminders` | `GET /api/v1/reminders` | — | `string[]` (patientIds) | sesión | — | — |
 | `tasks.sendReminder` | `POST /api/v1/patients/:patientId/reminders` | — (recomendado `{ channel?, vaccines? }`) | `void` | `agenda.gestionar` | 403 (sin acceso), 404 | Envía mensaje al dueño; evento `RecordatorioVacunaEnviado` |
 
