@@ -31,6 +31,7 @@ El contrato objetivo y sus entradas/salidas se especifican en [red-y-acceso](dom
 | 2 | `patients.get` | GET | `/api/v1/patients/:id` | sesión (+`ficha.ver` para secciones clínicas) | Proyección por alcance; auditar si compartido |
 | 3 | `patients.listByOwner` | GET | `/api/v1/owners/:rut/patients` | sesión | Filtrar por acceso de red |
 | 3b | `patients.addRecord` | POST | `/api/v1/patients/:id/records` | `ficha.editar` | Append-only (consulta/vacuna/examen/receta/corrección/anulación); corrección solo de la clínica autora; 403 con Resumen clínico |
+| 3c | `owners.updateContact` | POST | `/api/v1/owners/:rut/contact` | `agenda.gestionar` | Canal preferido + opt-out de recordatorios (suprime pendientes) |
 | 4 | `owners.list` | GET | `/api/v1/owners` | sesión | Solo dueños con mascota visible |
 | 5 | `owners.get` | GET | `/api/v1/owners/:rut` | sesión | Validar RUT |
 
@@ -43,7 +44,8 @@ El contrato objetivo y sus entradas/salidas se especifican en [red-y-acceso](dom
 | 8 | `clinic.updateRoom` | PATCH | `/api/v1/rooms/:id` | `agenda.gestionar` *(propuesto; hoy sin guard)* | Validar transición y unicidad doctor/paciente |
 | 10 | `appointments.list` | GET | `/api/v1/appointments` | sesión |  |
 | 11 | `appointments.create` | POST | `/api/v1/appointments` | `agenda.gestionar` | 409 bloque ocupado; status forzado a Agendada |
-| 12 | `appointments.update` | PATCH | `/api/v1/appointments/:id` | `agenda.gestionar` | Validar transición y bloque |
+| 12 | `appointments.update` | PATCH | `/api/v1/appointments/:id` | `agenda.gestionar` | Validar transición y bloque; cancelar suprime el recordatorio pendiente |
+| 12b | `appointments.remind` | POST | `/api/v1/appointments/:id/remind` | `agenda.gestionar` | Solo Email y sin opt-out; idempotente por cita (dedup en outbox); cancelada → 409 |
 | 67 | `security.listAccess` | GET | `/api/v1/security/access` | `seguridad.ver` o `agenda.gestionar` *(propuesto)* |  |
 | 68 | `security.listWaiting` | GET | `/api/v1/security/waiting` | sesión |  |
 | 69 | `security.checkIn` | POST | `/api/v1/security/waiting` | `agenda.gestionar` | registra la llegada de una cita de hoy; Atómico acceso+espera; solo citas de hoy |

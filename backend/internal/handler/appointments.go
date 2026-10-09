@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"github.com/jackc/pgx/v5"
 	"github.com/vetdata/api/internal/domain"
+	"github.com/vetdata/api/internal/notifications"
 	"net/http"
+	"net/mail"
 	"strings"
 	"time"
 )
@@ -18,6 +20,7 @@ func (s *Server) operationsRoutes(m *http.ServeMux) {
 	s.route(m, "GET /api/v1/appointments", s.listAppointments)
 	s.route(m, "POST /api/v1/appointments", s.createAppointment)
 	s.route(m, "PATCH /api/v1/appointments/{id}", s.updateAppointment)
+	s.route(m, "POST /api/v1/appointments/{id}/remind", s.remindAppointment)
 	s.route(m, "GET /api/v1/rooms", s.listRooms)
 	s.route(m, "POST /api/v1/rooms", s.createRoom)
 	s.route(m, "PATCH /api/v1/rooms/{id}", s.updateRoom)
@@ -220,7 +223,78 @@ func (s *Server) updateAppointment(w http.ResponseWriter, r *http.Request) error
 		if _, err = tx.Exec(r.Context(), "UPDATE appointments SET status=$3,doctor_id=$4,starts_at=$5,ends_at=$6,reason=$7 WHERE id=$1 AND clinic_id=$2", id, a.ClinicID, status, doctor, start, end, reason); err != nil {
 			return nil, err
 		}
+		if status == "Cancelada" {
+			if _, err = tx.Exec(r.Context(), "DELETE FROM notification_outbox WHERE sent_at IS NULL AND dedup_key=$1", "reminder:"+id); err != nil {
+				return nil, err
+			}
+		}
 		return appointmentJSON(r.Context(), tx, id, a.ClinicID)
+	})
+}
+
+func (s *Server) remindAppointment(w http.ResponseWriter, r *http.Request) error {
+	a, err := s.actor(r)
+	if err != nil {
+		return err
+	}
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	if s.opt.Mail == nil || !s.opt.Mail.Enabled() {
+		return fail(503, "notifications_unavailable", "Avisos no disponibles")
+	}
+	return s.mutate(w, r, a, "agenda.gestionar", struct{}{}, 200, func(tx pgx.Tx, a Actor) (any, error) {
+		var status, patient, doctor, reason, email, channel, firstName, lastName, clinic string
+		var start, end time.Time
+		var optOut bool
+		err := tx.QueryRow(r.Context(), `SELECT a.status,a.starts_at,a.ends_at,p.name,d.name,a.reason,o.email,o.preferred_contact,o.first_name,o.last_name,c.name,co.reminder_opt_out
+ FROM appointments a JOIN patients p ON p.id=a.patient_id JOIN doctors d ON d.id=a.doctor_id
+ JOIN owners o ON o.id=p.owner_id JOIN clinic_owners co ON co.owner_id=o.id AND co.clinic_id=a.clinic_id
+ JOIN clinics c ON c.id=a.clinic_id
+ WHERE a.id=$1 AND a.clinic_id=$2 FOR UPDATE OF a`,
+			id, a.ClinicID).Scan(&status, &start, &end, &patient, &doctor, &reason, &email, &channel, &firstName, &lastName, &clinic, &optOut)
+		if err != nil {
+			return nil, err
+		}
+		if status != "Agendada" && status != "Confirmada" {
+			return nil, fail(409, "invalid_status", "Solo citas activas reciben recordatorio")
+		}
+		skip := func(reason string) (any, error) {
+			if e := audit(r.Context(), tx, a, "reminder.skipped", id, map[string]string{"reason": reason}); e != nil {
+				return nil, e
+			}
+			return map[string]any{"sent": false, "reason": reason}, nil
+		}
+		if optOut {
+			return skip("opted_out")
+		}
+		if channel != "Email" {
+			return skip("channel_unavailable")
+		}
+		if _, err = mail.ParseAddress(email); err != nil || email != strings.TrimSpace(email) {
+			return nil, fail(400, "invalid_email", "Correo del dueño inválido")
+		}
+		key := "reminder:" + id
+		var sentAt *time.Time
+		if err = tx.QueryRow(r.Context(), "SELECT sent_at FROM notification_outbox WHERE dedup_key=$1", key).Scan(&sentAt); err != nil && err != pgx.ErrNoRows {
+			return nil, err
+		}
+		if err == nil {
+			if sentAt != nil {
+				return skip("already_sent")
+			}
+			return skip("already_pending")
+		}
+		when := start.In(domain.Santiago).Format("02/01/2006 15:04")
+		body := "Hola " + firstName + " " + lastName + ":\nTe recordamos tu cita en " + clinic + ".\nMascota: " + patient + "\nFecha: " + when + "\nProfesional: " + doctor + "\nMotivo: " + reason + "\nSi no querés más avisos, pedilo en recepción."
+		if err = s.opt.Mail.Enqueue(r.Context(), tx, key, notifications.Message{To: email, Subject: "Recordatorio de cita — " + clinic, Body: body}); err != nil {
+			return nil, err
+		}
+		if err = audit(r.Context(), tx, a, "reminder.queued", id, map[string]string{}); err != nil {
+			return nil, err
+		}
+		return map[string]any{"sent": true}, nil
 	})
 }
 

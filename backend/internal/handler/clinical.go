@@ -239,6 +239,7 @@ func (s *Server) clinicalRoutes(m *http.ServeMux) {
 	s.route(m, "GET /api/v1/owners", s.listOwners)
 	s.route(m, "GET /api/v1/owners/{rut}", s.getOwner)
 	s.route(m, "POST /api/v1/owners", s.createOwner)
+	s.route(m, "POST /api/v1/owners/{rut}/contact", s.updateOwnerContact)
 	s.route(m, "GET /api/v1/network/search", s.searchNetwork)
 }
 
@@ -504,7 +505,7 @@ func (s *Server) createOwner(w http.ResponseWriter, r *http.Request) error {
 
 const ownerProjection = `SELECT o.id,o.rut,o.first_name AS "firstName",o.last_name AS "lastName",o.email,o.phone,o.alt_phone AS "altPhone",o.address,o.sector,o.region,
  o.birth_date AS "birthDate",o.registered_at AS "registeredAt",o.preferred_contact AS "preferredContact",o.emergency_contact AS "emergencyContact",
- co.balance,co.notes FROM owners o JOIN clinic_owners co ON co.owner_id=o.id WHERE co.clinic_id=$1`
+ co.balance,co.notes,co.reminder_opt_out AS "reminderOptOut" FROM owners o JOIN clinic_owners co ON co.owner_id=o.id WHERE co.clinic_id=$1`
 
 func (s *Server) listOwners(w http.ResponseWriter, r *http.Request) error {
 	a, err := s.actor(r)
@@ -539,6 +540,59 @@ func (s *Server) getOwner(w http.ResponseWriter, r *http.Request) error {
 	}
 	writeJSON(w, 200, json.RawMessage(raw))
 	return nil
+}
+
+func (s *Server) updateOwnerContact(w http.ResponseWriter, r *http.Request) error {
+	a, err := s.actor(r)
+	if err != nil {
+		return err
+	}
+	rut, err := domain.NormalizeRUT(r.PathValue("rut"))
+	if err != nil {
+		return fail(400, "invalid_rut", err.Error())
+	}
+	var in struct {
+		PreferredContact *string `json:"preferredContact"`
+		ReminderOptOut   *bool   `json:"reminderOptOut"`
+	}
+	if err = decode(w, r, &in); err != nil {
+		return err
+	}
+	if in.PreferredContact != nil && *in.PreferredContact != "WhatsApp" && *in.PreferredContact != "Teléfono" && *in.PreferredContact != "Email" {
+		return fail(400, "invalid_contact", "Canal inválido")
+	}
+	if in.PreferredContact == nil && in.ReminderOptOut == nil {
+		return fail(400, "invalid_contact", "Nada que actualizar")
+	}
+	return s.mutate(w, r, a, "agenda.gestionar", in, 200, func(tx pgx.Tx, a Actor) (any, error) {
+		var id string
+		if err := tx.QueryRow(r.Context(), "SELECT o.id FROM owners o JOIN clinic_owners co ON co.owner_id=o.id WHERE co.clinic_id=$1 AND o.rut=$2", a.ClinicID, rut).Scan(&id); err != nil {
+			return nil, err
+		}
+		if in.PreferredContact != nil {
+			if _, err := tx.Exec(r.Context(), "UPDATE owners SET preferred_contact=$2 WHERE id=$1", id, *in.PreferredContact); err != nil {
+				return nil, err
+			}
+		}
+		if in.ReminderOptOut != nil {
+			if _, err := tx.Exec(r.Context(), "UPDATE clinic_owners SET reminder_opt_out=$3 WHERE clinic_id=$1 AND owner_id=$2", a.ClinicID, id, *in.ReminderOptOut); err != nil {
+				return nil, err
+			}
+			if *in.ReminderOptOut {
+				if _, err := tx.Exec(r.Context(), `DELETE FROM notification_outbox WHERE sent_at IS NULL AND dedup_key IN
+ (SELECT 'reminder:'||a.id FROM appointments a JOIN patients p ON p.id=a.patient_id
+  WHERE a.clinic_id=$1 AND p.owner_id=$2 AND a.status IN ('Agendada','Confirmada'))`, a.ClinicID, id); err != nil {
+					return nil, err
+				}
+			}
+		}
+		if err := audit(r.Context(), tx, a, "owner.contact_updated", id, in); err != nil {
+			return nil, err
+		}
+		var raw []byte
+		err := tx.QueryRow(r.Context(), "SELECT to_jsonb(v) FROM ("+ownerProjection+" AND o.id=$2) v", a.ClinicID, id).Scan(&raw)
+		return json.RawMessage(raw), err
+	})
 }
 
 type patientInput struct {
