@@ -54,8 +54,8 @@ Pantallas: vista rápida del paciente → "Facturar" (`care-actions/invoice-form
 | Operación (servicio) | Método y ruta | Entrada | Salida | Permiso | Errores | Auditoría / efectos |
 |---|---|---|---|---|---|---|
 | `clinic.listServices` | `GET /api/v1/billable-services` | — | `Service[]` | sesión | 401 | — |
-| `invoices.list` | `GET /api/v1/invoices` | `?ownerRut&patientId&status&from&to` | `Invoice[]` | `facturas.emitir` o `reportes.financiero` (propuesto) | 401, 403 | — |
-| `invoices.create` | `POST /api/v1/invoices` | `NewInvoice` = `{ patientId, ownerRut, date, items, net, iva, total, status }` (el servidor ignora `date`, `net`, `iva`, `total`, `status`; recomendado aceptar solo `{ patientId, items:[{serviceId|medicationId, qty}] }`) | `Invoice` con folio | `facturas.emitir` | 400, 403 (mascota sin acceso), 409 (stock insuficiente) | Atómico con kardex de farmacia. Evento `FacturaEmitida`; posible `StockBajo` |
+| `invoices.list` | `GET /api/v1/invoices` | — | `Invoice[]` de la clínica | `facturas.emitir` | 401, 403 | — |
+| `invoices.create` | `POST /api/v1/invoices` | `{ownerId, patientId?, lines:[{itemId, qty}]}` (precios siempre desde catálogo) | `Invoice` con folio único por clínica | `facturas.emitir` | 400, 403 (mascota sin acceso), 404, 409 (stock insuficiente/inactivo) | Atómico: factura + folio + kardex `Venta` FEFO con `reference_id`; reintento idempotente no duplica. Evento `invoice.created` |
 
 ## Efectos en otros dominios
 - **Farmacia**: salida de stock por medicamento (kardex `Venta`), puede disparar `StockBajo`/tarea `stockmed`.

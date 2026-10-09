@@ -13,6 +13,7 @@ import (
 func (s *Server) operationsRoutes(m *http.ServeMux) {
 	s.scheduleRoutes(m)
 	s.inventoryRoutes(m)
+	s.billingRoutes(m)
 	s.route(m, "GET /api/v1/appointments", s.listAppointments)
 	s.route(m, "POST /api/v1/appointments", s.createAppointment)
 	s.route(m, "PATCH /api/v1/appointments/{id}", s.updateAppointment)

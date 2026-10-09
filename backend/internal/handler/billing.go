@@ -1,0 +1,160 @@
+package handler
+
+import (
+	"encoding/json"
+	"net/http"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/vetdata/api/internal/domain"
+)
+
+func (s *Server) billingRoutes(m *http.ServeMux) {
+	s.route(m, "GET /api/v1/invoices", s.listInvoices)
+	s.route(m, "POST /api/v1/invoices", s.createInvoice)
+}
+
+const invoiceSelect = `SELECT i.id,i.owner_id AS "ownerId",i.patient_id AS "patientId",i.number,i.net,i.vat,i.total,i.paid,i.items,i.created_at AS "createdAt",i.actor_id AS "actorId" FROM invoices i`
+
+func (s *Server) listInvoices(w http.ResponseWriter, r *http.Request) error {
+	return s.scopedList(w, r, "facturas.emitir", invoiceSelect+` WHERE i.clinic_id=$1 ORDER BY i.number DESC,i.id`)
+}
+
+type invoiceLineInput struct {
+	ItemID string `json:"itemId"`
+	Qty    int    `json:"qty"`
+}
+
+type invoiceInput struct {
+	OwnerID   string             `json:"ownerId"`
+	PatientID *string            `json:"patientId"`
+	Lines     []invoiceLineInput `json:"lines"`
+}
+
+func (s *Server) createInvoice(w http.ResponseWriter, r *http.Request) error {
+	a, err := s.actor(r)
+	if err != nil {
+		return err
+	}
+	var in invoiceInput
+	if err = decode(w, r, &in); err != nil {
+		return err
+	}
+	if !domain.ValidID(in.OwnerID) || len(in.Lines) == 0 || len(in.Lines) > 100 {
+		return fail(400, "invalid_invoice", "Factura inválida")
+	}
+	if in.PatientID != nil && !domain.ValidID(*in.PatientID) {
+		return fail(400, "invalid_invoice", "Paciente inválido")
+	}
+	for _, line := range in.Lines {
+		if !domain.ValidID(line.ItemID) || line.Qty < 1 || line.Qty > 1000000 {
+			return fail(400, "invalid_invoice", "Línea inválida")
+		}
+	}
+	return s.mutate(w, r, a, "facturas.emitir", in, 201, func(tx pgx.Tx, a Actor) (any, error) {
+		var linked bool
+		if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM clinic_owners WHERE clinic_id=$1 AND owner_id=$2)", a.ClinicID, in.OwnerID).Scan(&linked); err != nil {
+			return nil, err
+		}
+		if !linked {
+			return nil, pgx.ErrNoRows
+		}
+		if in.PatientID != nil {
+			if _, err := patientAccess(r.Context(), tx, a, *in.PatientID); err != nil {
+				return nil, err
+			}
+			var owner string
+			if err := tx.QueryRow(r.Context(), "SELECT owner_id FROM patients WHERE id=$1", *in.PatientID).Scan(&owner); err != nil {
+				return nil, err
+			}
+			if owner != in.OwnerID {
+				return nil, fail(400, "owner_mismatch", "La mascota no es de ese dueño")
+			}
+		}
+		id := domain.UUID()
+		var net int64
+		snapshot := make([]map[string]any, 0, len(in.Lines))
+		for _, line := range in.Lines {
+			var kind, name string
+			var price int64
+			var active bool
+			if err := tx.QueryRow(r.Context(), "SELECT kind,name,price_net,active FROM catalog_items WHERE id=$1 AND clinic_id=$2", line.ItemID, a.ClinicID).Scan(&kind, &name, &price, &active); err != nil {
+				if err == pgx.ErrNoRows {
+					return nil, fail(404, "unknown_item", "Ítem inexistente")
+				}
+				return nil, err
+			}
+			if !active {
+				return nil, fail(409, "inactive_item", "Ítem inactivo")
+			}
+			net += price * int64(line.Qty)
+			snapshot = append(snapshot, map[string]any{"itemId": line.ItemID, "kind": kind, "name": name, "qty": line.Qty, "priceNet": price, "lineNet": price * int64(line.Qty)})
+			if kind == "service" {
+				continue
+			}
+			// FEFO: consumir lotes por vencimiento con bloqueo de fila.
+			rows, err := tx.Query(r.Context(), "SELECT id,qty FROM stock_lots WHERE item_id=$1 AND clinic_id=$2 AND qty>0 ORDER BY expiry NULLS LAST,id FOR UPDATE", line.ItemID, a.ClinicID)
+			if err != nil {
+				return nil, err
+			}
+			need := line.Qty
+			type allocation struct {
+				lotID string
+				qty   int
+			}
+			var lots []allocation
+			for rows.Next() && need > 0 {
+				var lotID string
+				var have int
+				if err = rows.Scan(&lotID, &have); err != nil {
+					rows.Close()
+					return nil, err
+				}
+				take := have
+				if take > need {
+					take = need
+				}
+				lots = append(lots, allocation{lotID, take})
+				need -= take
+			}
+			rows.Close()
+			if err = rows.Err(); err != nil {
+				return nil, err
+			}
+			if need > 0 {
+				return nil, fail(409, "insufficient_stock", "Stock insuficiente")
+			}
+			for _, lot := range lots {
+				if _, err = tx.Exec(r.Context(), "UPDATE stock_lots SET qty=qty-$2 WHERE id=$1", lot.lotID, lot.qty); err != nil {
+					return nil, err
+				}
+				if _, err = tx.Exec(r.Context(), "INSERT INTO inventory_movements(clinic_id,item_id,lot_id,qty,reason,reference_id,actor_id) VALUES($1,$2,$3,$4,'Venta',$5,$6)", a.ClinicID, line.ItemID, lot.lotID, -lot.qty, id, a.UserID); err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
+		money, err := domain.MoneyFromNet(net)
+		if err != nil {
+			return nil, err
+		}
+		number, err := nextNumber(r.Context(), tx, a.ClinicID, "invoice")
+		if err != nil {
+			return nil, err
+		}
+		itemsRaw, err := json.Marshal(snapshot)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(r.Context(), "INSERT INTO invoices(id,clinic_id,owner_id,patient_id,number,net,vat,total,items,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", id, a.ClinicID, in.OwnerID, in.PatientID, number, money.Net, money.VAT, money.Total, itemsRaw, a.UserID); err != nil {
+			return nil, err
+		}
+		if err = audit(r.Context(), tx, a, "invoice.created", id, map[string]any{"number": number}); err != nil {
+			return nil, err
+		}
+		var raw []byte
+		if err = tx.QueryRow(r.Context(), "SELECT to_jsonb(v) FROM ("+invoiceSelect+" WHERE i.id=$1 AND i.clinic_id=$2) v", id, a.ClinicID).Scan(&raw); err != nil {
+			return nil, err
+		}
+		return json.RawMessage(raw), nil
+	})
+}

@@ -59,8 +59,8 @@ El contrato objetivo y sus entradas/salidas se especifican en [red-y-acceso](dom
 | # | Servicio.operación | Método | Ruta | Permiso | Notas |
 |---|---|---|---|---|---|
 | 9 | `clinic.listServices` | GET | `/api/v1/billable-services` | sesión |  |
-| 13 | `invoices.list` | GET | `/api/v1/invoices` | `facturas.emitir` o `reportes.financiero` *(propuesto)* |  |
-| 14 | `invoices.create` | POST | `/api/v1/invoices` | `facturas.emitir` | asigna folio y descuenta del inventario los medicamentos vendidos; Atómico con kardex farmacia; recalcular totales |
+| 13 | `invoices.list` | GET | `/api/v1/invoices` | `facturas.emitir` | Solo la clínica |
+| 14 | `invoices.create` | POST | `/api/v1/invoices` | `facturas.emitir` | Folio único por clínica; precios desde catálogo; kardex `Venta` FEFO atómico; 409 sin stock; reintento idempotente |
 
 ## farmacia (11)  — [detalle](dominios/farmacia.md)
 
