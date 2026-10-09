@@ -224,6 +224,9 @@ func (s *Server) switchClinic(w http.ResponseWriter, r *http.Request) error {
 	if !domain.ValidID(in.ClinicID) {
 		return fail(400, "invalid_clinic", "Clínica inválida")
 	}
+	if in.ClinicID == StaffClinicID {
+		return fail(403, "staff_forbidden", "La clínica Staff es solo para VetData Staff")
+	}
 	tx, err := s.pool.Begin(r.Context())
 	if err != nil {
 		return err

@@ -67,6 +67,22 @@ func newFixture(t *testing.T) *fixture {
 	if _, err := pool.Exec(ctx, "INSERT INTO role_permissions(clinic_id,role,permission) VALUES($1,'Admin','usuarios.administrar')", f.clinic); err != nil {
 		t.Fatal(err)
 	}
+	// T4-3 support permissions: Admin manages; Recepción creates/reply.
+	// (soporte.crear is a new T4-3 perm; it does not affect pre-T4-3 perms.)
+	for _, cid := range []string{f.clinic, f.other} {
+		for _, role := range []string{"Admin", "Recepción"} {
+			for _, p := range []string{"soporte.crear"} {
+				if _, e := pool.Exec(ctx, "INSERT INTO role_permissions(clinic_id,role,permission) VALUES($1,$2,$3) ON CONFLICT DO NOTHING", cid, role, p); e != nil {
+					t.Fatal(e)
+				}
+			}
+		}
+	}
+	for _, p := range []string{"soporte.crear", "soporte.administrar"} {
+		if _, e := pool.Exec(ctx, "INSERT INTO role_permissions(clinic_id,role,permission) VALUES($1,'Admin',$2) ON CONFLICT DO NOTHING", f.clinic, p); e != nil {
+			t.Fatal(e)
+		}
+	}
 	var err error
 	f.mail, err = notifications.New(pool, base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{42}, 32)), f.sender)
 	if err != nil {
@@ -99,6 +115,24 @@ func (f *fixture) login(t *testing.T) []*http.Cookie {
 	w := f.request("POST", "/api/v1/auth/login", map[string]string{"email": "test@example.test", "password": "Test-password-123", "clinicId": f.clinic})
 	if w.Code != 200 {
 		t.Fatalf("login %d %s", w.Code, w.Body.String())
+	}
+	return w.Result().Cookies()
+}
+func (f *fixture) loginAs(t *testing.T, role string) []*http.Cookie {
+	t.Helper()
+	ctx := context.Background()
+	hash, _ := bcrypt.GenerateFromPassword([]byte("Test-password-123"), 4)
+	uid := domain.UUID()
+	email := "role-" + role + "@example.test"
+	if _, e := f.pool.Exec(ctx, "INSERT INTO users(id,name,email,password_hash,status) VALUES($1,'Role Test',$2,$3,'Activo')", uid, email, string(hash)); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "INSERT INTO memberships(user_id,clinic_id,role) VALUES($1,$2,$3)", uid, f.clinic, role); e != nil {
+		t.Fatal(e)
+	}
+	w := f.request("POST", "/api/v1/auth/login", map[string]string{"email": email, "password": "Test-password-123", "clinicId": f.clinic})
+	if w.Code != 200 {
+		t.Fatalf("loginAs %s: %d %s", role, w.Code, w.Body.String())
 	}
 	return w.Result().Cookies()
 }
