@@ -189,6 +189,9 @@ func TestExpiredGrantDeniesRead(t *testing.T) {
 	}
 }
 func lastToken(t *testing.T, f *fixture, ctx context.Context) string {
+	return lastMarker(t, f, ctx, "&token=")
+}
+func lastMarker(t *testing.T, f *fixture, ctx context.Context, marker string) string {
 	t.Helper()
 	for i := 0; i < 10; i++ {
 		if _, err := f.mail.DeliverOne(ctx); err != nil {
@@ -196,12 +199,79 @@ func lastToken(t *testing.T, f *fixture, ctx context.Context) string {
 		}
 	}
 	for i := len(f.sender.messages) - 1; i >= 0; i-- {
-		if body := f.sender.messages[i].Body; strings.Contains(body, "&token=") {
-			return strings.Split(body, "&token=")[1]
+		if body := f.sender.messages[i].Body; strings.Contains(body, marker) {
+			return strings.Split(body, marker)[1]
 		}
 	}
 	t.Fatal("no token mail")
 	return ""
+}
+func TestSharedReadAuditVisibleToOriginAndOwner(t *testing.T) {
+	f, own, other, pid, oid := setupSharing(t)
+	ctx := context.Background()
+	w := f.request("POST", "/api/v1/sharing/requests", sharingInput{PatientIDs: []string{pid}, Scope: "Ficha completa", Reason: "Continuidad clínica"}, other...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var qs []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid := qs[0]["id"].(string)
+	raw := lastToken(t, f, ctx)
+	w = f.request("POST", "/api/v1/owner/sharing/requests/"+qid+"/decision", map[string]any{"token": raw, "rut": "12345678-5", "approve": true, "scope": "Ficha completa"})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/patients/"+pid, nil, other...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var readerClinic, scope, owner string
+	var grant *string
+	if err := f.pool.QueryRow(ctx, "SELECT reader_clinic_id,scope,owner_id,grant_id FROM shared_read_audit WHERE patient_id=$1", pid).Scan(&readerClinic, &scope, &owner, &grant); err != nil {
+		t.Fatal(err)
+	}
+	if readerClinic != f.other || scope != "Ficha completa" || owner != oid || grant == nil {
+		t.Fatal("audit row", readerClinic, scope, owner, grant)
+	}
+	w = f.request("GET", "/api/v1/sharing/audit", nil, own...)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), pid) || !strings.Contains(w.Body.String(), f.other) {
+		t.Fatal("origin audit", w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/owner/auth/request", map[string]string{"rut": "12345678-5", "email": "owner@example.test"})
+	if w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	loginToken := lastMarker(t, f, ctx, "#token=")
+	w = f.request("POST", "/api/v1/owner/auth/verify", map[string]string{"rut": "12345678-5", "token": loginToken})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/owner/sharing/audit", nil, w.Result().Cookies()...)
+	if w.Code != 200 || !strings.Contains(w.Body.String(), pid) || !strings.Contains(w.Body.String(), f.other) {
+		t.Fatal("owner audit", w.Code, w.Body.String())
+	}
+	hash, _ := bcrypt.GenerateFromPassword([]byte("Test-password-123"), 4)
+	uid := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO users(id,name,email,password_hash,status) VALUES($1,'Vet','vet@example.test',$2,'Activo')", uid, string(hash)); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "INSERT INTO memberships(user_id,clinic_id,role) VALUES($1,$2,'Veterinario')", uid, f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	w = f.request("POST", "/api/v1/auth/login", map[string]string{"email": "vet@example.test", "password": "Test-password-123", "clinicId": f.clinic})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/sharing/audit", nil, w.Result().Cookies()...)
+	if w.Code != 403 {
+		t.Fatal("non-admin audit", w.Code)
+	}
+	if _, e := f.pool.Exec(ctx, "UPDATE shared_read_audit SET scope='Resumen clínico' WHERE patient_id=$1", pid); e == nil {
+		t.Fatal("audit updated")
+	}
+	if _, e := f.pool.Exec(ctx, "DELETE FROM shared_read_audit WHERE patient_id=$1", pid); e == nil {
+		t.Fatal("audit deleted")
+	}
 }
 func TestEmergencySuspensionTransitionsAndNotifications(t *testing.T) {
 	f, own, other, pid, _ := setupSharing(t)
