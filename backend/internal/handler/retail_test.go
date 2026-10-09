@@ -260,3 +260,21 @@ func TestRetailShipmentsAdvance(t *testing.T) {
 		t.Fatal("shipments filter", w.Body.String())
 	}
 }
+
+func TestRetailRequiresPermission(t *testing.T) {
+	f, _, _, _, _ := setupSharing(t)
+	ctx := context.Background()
+	// Veterinario no tiene tienda.vender (matriz model.go); checkoutRetail lo exige vía mutate().
+	vet := f.loginAs(t, "Veterinario")
+	product := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO catalog_items(id,clinic_id,kind,name,price_net,unit_cost) VALUES($1,$2,'product','Alimento',10000,6000)", product, f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "INSERT INTO stock_lots(id,clinic_id,item_id,location,lot,qty,unit_cost) VALUES($1,$2,$3,'sala','S-403',5,6000)", domain.UUID(), f.clinic, product); e != nil {
+		t.Fatal(e)
+	}
+	code, out := checkout(t, f, domain.UUID(), map[string]any{"items": []map[string]any{{"productId": product, "qty": 1}}, "payment": "Efectivo"}, vet...)
+	if code != 403 {
+		t.Fatal("veterinario sin tienda.vender", code, out)
+	}
+}

@@ -137,3 +137,22 @@ func TestPartialReceiptsIdempotencyRollbackAndConcurrentStock(t *testing.T) {
 		t.Fatal("mutable ledger")
 	}
 }
+
+func TestInventoryRequiresPermission(t *testing.T) {
+	f, _, _, _, _ := setupSharing(t)
+	ctx := context.Background()
+	// Recepción no tiene farmacia.inventario; POST /api/v1/pharmacy/movements lo exige vía mutate() en adjustInventory.
+	recep := f.loginAs(t, "Recepción")
+	item := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO catalog_items(id,clinic_id,kind,name,price_net,unit_cost) VALUES($1,$2,'medication','Insumo',1000,500)", item, f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	lot := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO stock_lots(id,clinic_id,item_id,location,lot,qty,unit_cost) VALUES($1,$2,$3,'pharmacy','LOTE-403',10,500)", lot, f.clinic, item); e != nil {
+		t.Fatal(e)
+	}
+	w := f.request("POST", "/api/v1/pharmacy/movements", map[string]any{"lotId": lot, "qty": -1, "reason": "Merma"}, recep...)
+	if w.Code != 403 {
+		t.Fatal("recepción sin farmacia.inventario", w.Code, w.Body.String())
+	}
+}

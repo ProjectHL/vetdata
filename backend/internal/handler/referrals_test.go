@@ -156,3 +156,23 @@ func TestReferralsDispenseAndInvoiceGate(t *testing.T) {
 		t.Fatal("zero qty", code)
 	}
 }
+
+func TestReferralsRequiresPermission(t *testing.T) {
+	f, own, _, pid, _ := setupSharing(t)
+	ctx := context.Background()
+	// Recepción no tiene medicamentos.derivar; POST /api/v1/pharmacy/referrals lo exige vía mutate() en createReferral.
+	recep := f.loginAs(t, "Recepción")
+	today := time.Now().In(domain.Santiago).Format("2006-01-02")
+	med := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO catalog_items(id,clinic_id,kind,name,price_net,unit_cost) VALUES($1,$2,'medication','Común',5000,1000)", med, f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	code, rx := createRecord(t, f, own, pid, "prescription", map[string]any{"date": today, "drug": "Común", "dose": "1 comp", "duration": "5 días", "doctor": "Vet"}, nil)
+	if code != 201 {
+		t.Fatal(code, rx)
+	}
+	w := f.request("POST", "/api/v1/pharmacy/referrals", map[string]any{"patientId": pid, "prescriptionId": rx["id"], "items": []map[string]any{{"itemId": med, "qty": 1}}}, recep...)
+	if w.Code != 403 {
+		t.Fatal("recepción sin medicamentos.derivar", w.Code, w.Body.String())
+	}
+}

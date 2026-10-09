@@ -356,3 +356,21 @@ func TestInvoicePaymentsPartialAndBalance(t *testing.T) {
 		t.Fatal("tenant history", w.Code)
 	}
 }
+
+func TestBillingRequiresPermission(t *testing.T) {
+	f, own, _, _, oid := setupSharing(t)
+	ctx := context.Background()
+	// La matriz otorga facturas.emitir a los 4 roles fijos; para probar la guarda se revoca a Admin.
+	// POST /api/v1/invoices la exige vía mutate() en createInvoice.
+	service := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO catalog_items(id,clinic_id,kind,name,price_net) VALUES($1,$2,'service','Consulta',5000)", service, f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "DELETE FROM role_permissions WHERE clinic_id=$1 AND role='Admin' AND permission='facturas.emitir'", f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	code, _ := emitInvoice(f, "", invoiceBody(oid, "", []map[string]any{{"itemId": service, "qty": 1}}...), own)
+	if code != 403 {
+		t.Fatal("emisión sin facturas.emitir", code)
+	}
+}

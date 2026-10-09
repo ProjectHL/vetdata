@@ -96,3 +96,14 @@ func TestTasksComputedFilteredAndMeta(t *testing.T) {
 		t.Fatal("bad view", w.Code)
 	}
 }
+
+func TestTasksRequiresPermission(t *testing.T) {
+	f, _, _, _, _ := setupSharing(t)
+	// GET /api/v1/tasks solo exige sesión y filtra por permiso; PATCH sí lo exige vía permitted() en updateTask.
+	// Farmacia no tiene agenda.gestionar: mutar una llegada debe dar 403.
+	farma := f.loginAs(t, "Farmacia")
+	w := f.request("PATCH", "/api/v1/tasks/llegada%3A"+domain.UUID(), map[string]any{"done": true}, farma...)
+	if w.Code != 403 {
+		t.Fatal("farmacia sin agenda.gestionar", w.Code, w.Body.String())
+	}
+}

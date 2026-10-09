@@ -13,9 +13,9 @@ Entrada: Fase 3 firmada (`docs/roadmap/cierre-fase-03.md`, T3-5 parcial por D-02
 - [x] T4-1 Tienda: checkout atómico (boleta + kardex sala + 409 si falta + despacho), transferToSala atómico, receiveOrder a central, todo con permisos `tienda.*`
 - [x] T4-2 Seguridad: eventos crear/actualizar/nota con `seguridad.ver`, cerrar/falsa-alarma con `seguridad.administrar`, `resolvedAt` inmutable sin reapertura, auditoría append-only servidor (sin POST cliente)
 - [x] T4-3 Soporte: tickets + ideas + `proposeIdea` atómico, rol `VetData Staff` fuera de tenant + `/admin` mínimo, SLA horas corridas, sin `simulateSupportReply` en prod
-- [ ] T4-4 Analítica: KPIs en servidor, job diario, k≥5, default-on anonimizado con opt-out, base sector dueño, texto VetData, sin fichas/dueños ajenos (T4-4a cerrado, falta T4-4b: vaccine-coverage/coverageByVaccine, revenue-by-line/monthly-revenue con reportes.financiero, box-occupancy)
+- [x] T4-4 Analítica: KPIs en servidor, job diario, k≥5, default-on anonimizado con opt-out, base sector dueño, texto VetData, sin fichas/dueños ajenos (T4-4a base + T4-4b vacunas/ingresos/boxes, 9/9 TestAnalytics PASS)
 - [x] T4-5 Roles custom: evaluado 2026-10-09 — diferido, MVP con 4 fijos (acta en TAREAS)
-- [ ] T4-6 Salida fase: 10 dominios con endpoints reales y 403 funcionando
+- [x] T4-6 Salida fase: 10 dominios con endpoints reales y 403 funcionando (cierre-fase-04.md)
 
 ## Progreso
 

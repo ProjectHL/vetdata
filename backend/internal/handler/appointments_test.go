@@ -418,3 +418,19 @@ func TestWaitingRoomLifecycle(t *testing.T) {
 		t.Fatal(count, e)
 	}
 }
+
+func TestAgendaRequiresPermission(t *testing.T) {
+	f, _, _, pid, _ := setupSharing(t)
+	ctx := context.Background()
+	// Farmacia no tiene agenda.gestionar (matriz model.go); createAppointment lo exige vía mutate().
+	farma := f.loginAs(t, "Farmacia")
+	doctor := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO doctors(id,clinic_id,name,specialty,initials) VALUES($1,$2,'Vet','General','VT')", doctor, f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	now := time.Now().In(domain.Santiago)
+	w := f.request("POST", "/api/v1/appointments", appointmentInput{PatientID: pid, DoctorID: doctor, Date: now.Format("2006-01-02"), Time: now.Format("15:04"), Reason: "Urgencia", Emergency: true}, farma...)
+	if w.Code != 403 {
+		t.Fatal("farmacia sin agenda.gestionar", w.Code, w.Body.String())
+	}
+}
