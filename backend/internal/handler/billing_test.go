@@ -243,3 +243,116 @@ func TestInvoiceLineDiscounts(t *testing.T) {
 		t.Fatal("manipulated total", code)
 	}
 }
+
+func TestInvoicePaymentsPartialAndBalance(t *testing.T) {
+	f, own, other, _, oid := setupSharing(t)
+	ctx := context.Background()
+	service := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO catalog_items(id,clinic_id,kind,name,price_net) VALUES($1,$2,'service','Consulta',$3)", service, f.clinic, 10000); e != nil {
+		t.Fatal(e)
+	}
+	balance := func() int64 {
+		var b int64
+		if e := f.pool.QueryRow(ctx, "SELECT balance FROM clinic_owners WHERE clinic_id=$1 AND owner_id=$2", f.clinic, oid).Scan(&b); e != nil {
+			t.Fatal(e)
+		}
+		return b
+	}
+	code, inv := emitInvoice(f, "", invoiceBody(oid, "", []map[string]any{{"itemId": service, "qty": 1}}...), own)
+	if code != 201 || inv.Total != 11900 {
+		t.Fatal(code, inv)
+	}
+	if balance() != 11900 {
+		t.Fatal("balance after invoice", balance())
+	}
+	if inv.Items == nil {
+		t.Fatal("items")
+	}
+	pay := func(key string, amount int64, method string) (int, map[string]any) {
+		t.Helper()
+		var w *httptest.ResponseRecorder
+		body := map[string]any{"amount": amount, "method": method}
+		if key == "" {
+			w = f.request("POST", "/api/v1/invoices/"+inv.ID+"/payments", body, own...)
+		} else {
+			w = f.requestKey("POST", "/api/v1/invoices/"+inv.ID+"/payments", key, body, own...)
+		}
+		var out map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &out)
+		return w.Code, out
+	}
+	// Abono parcial con medio válido.
+	code, first := pay("", 4000, "Efectivo")
+	if code != 201 || first["remaining"] != float64(7900) {
+		t.Fatal("partial", code, first)
+	}
+	if balance() != 7900 {
+		t.Fatal("balance after partial", balance())
+	}
+	// Medio inválido, monto inválido y sobrepago fallan.
+	for _, bad := range []map[string]any{{"amount": 100, "method": "Cheque"}, {"amount": 0, "method": "Efectivo"}, {"amount": 8000, "method": "Débito"}} {
+		w := f.request("POST", "/api/v1/invoices/"+inv.ID+"/payments", bad, own...)
+		if w.Code != 400 && w.Code != 409 {
+			t.Fatal("payment validation", bad, w.Code)
+		}
+	}
+	// Concurrencia: dos abonos de 7000 sobre saldo 7900, uno solo pasa.
+	responses := make(chan int, 2)
+	var wg sync.WaitGroup
+	for i := 0; i < 2; i++ {
+		wg.Add(1)
+		go func() { defer wg.Done(); code, _ := pay("", 7000, "Transferencia"); responses <- code }()
+	}
+	wg.Wait()
+	close(responses)
+	counts := map[int]int{}
+	for c := range responses {
+		counts[c]++
+	}
+	if counts[201] != 1 || counts[409] != 1 {
+		t.Fatal("concurrent payments", counts)
+	}
+	// Completar hasta Pagada; después 409.
+	var remaining int64
+	if e := f.pool.QueryRow(ctx, "SELECT total-paid FROM invoices WHERE id=$1", inv.ID).Scan(&remaining); e != nil {
+		t.Fatal(e)
+	}
+	code, done := pay("", remaining, "Débito")
+	if code != 201 || done["remaining"] != float64(0) {
+		t.Fatal("settle", code, done)
+	}
+	if balance() != 0 {
+		t.Fatal("balance settled", balance())
+	}
+	w := f.request("GET", "/api/v1/invoices", nil, own...)
+	var list []invoiceOut
+	_ = json.Unmarshal(w.Body.Bytes(), &list)
+	found := false
+	for _, item := range list {
+		if item.ID == inv.ID {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("invoice list", w.Body.String())
+	}
+	code, _ = pay("", 100, "Efectivo")
+	if code != 409 {
+		t.Fatal("already paid", code)
+	}
+	// Historial de abonos y aislamiento por clínica.
+	w = f.request("GET", "/api/v1/invoices/"+inv.ID+"/payments", nil, own...)
+	var history []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &history)
+	if len(history) != 3 {
+		t.Fatal("history", history)
+	}
+	w = f.request("POST", "/api/v1/invoices/"+inv.ID+"/payments", map[string]any{"amount": 100, "method": "Efectivo"}, other...)
+	if w.Code != 404 {
+		t.Fatal("tenant payment", w.Code)
+	}
+	w = f.request("GET", "/api/v1/invoices/"+inv.ID+"/payments", nil, other...)
+	if w.Code != 404 {
+		t.Fatal("tenant history", w.Code)
+	}
+}

@@ -148,8 +148,8 @@ Votos: `support.vote` (toggle por clínica) — recomendado bloquear en `Lanzada
 | De → A | Operación | Quién | Backend DEBE |
 |---|---|---|---|
 | ∅ → Emitida | `invoices.create` | `facturas.emitir` | Forzar `Emitida` (hoy la UI envía `status` y el mock lo respeta) |
-| Emitida → Pagada | **sin operación** | — | Falta endpoint de pago (`preguntas-abiertas.md#p-11`) |
-No existen: anulación, nota de crédito, pago parcial.
+| Emitida → Pagada | `invoices.pay` (derivado `paid >= total`) | `facturas.emitir` | Abonos parciales con medio; 409 sobrepago; `balance` del dueño acompaña |
+No existen: anulación, nota de crédito.
 
 ### Cámara
 `CameraStatus = "En línea" | "Sin señal" | "Mantención"` — `src/domain/security.ts`

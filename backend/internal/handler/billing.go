@@ -11,12 +11,102 @@ import (
 func (s *Server) billingRoutes(m *http.ServeMux) {
 	s.route(m, "GET /api/v1/invoices", s.listInvoices)
 	s.route(m, "POST /api/v1/invoices", s.createInvoice)
+	s.route(m, "GET /api/v1/invoices/{id}/payments", s.listInvoicePayments)
+	s.route(m, "POST /api/v1/invoices/{id}/payments", s.createPayment)
 }
 
-const invoiceSelect = `SELECT i.id,i.owner_id AS "ownerId",i.patient_id AS "patientId",i.number,i.net,i.vat,i.total,i.paid,i.items,i.created_at AS "createdAt",i.actor_id AS "actorId" FROM invoices i`
+const invoiceSelect = `SELECT i.id,i.owner_id AS "ownerId",i.patient_id AS "patientId",i.number,i.net,i.vat,i.total,i.paid,i.total-i.paid AS "remaining",
+ CASE WHEN i.paid>=i.total THEN 'Pagada' ELSE 'Emitida' END AS status,i.items,i.created_at AS "createdAt",i.actor_id AS "actorId" FROM invoices i`
 
 func (s *Server) listInvoices(w http.ResponseWriter, r *http.Request) error {
 	return s.scopedList(w, r, "facturas.emitir", invoiceSelect+` WHERE i.clinic_id=$1 ORDER BY i.number DESC,i.id`)
+}
+
+func (s *Server) listInvoicePayments(w http.ResponseWriter, r *http.Request) error {
+	a, err := s.actor(r)
+	if err != nil {
+		return err
+	}
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	if err = s.permitted(r.Context(), a, "facturas.emitir"); err != nil {
+		return err
+	}
+	var exists bool
+	if err = s.pool.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM invoices WHERE id=$1 AND clinic_id=$2)", id, a.ClinicID).Scan(&exists); err != nil {
+		return err
+	}
+	if !exists {
+		return fail(404, "not_found", "Factura inexistente")
+	}
+	limit, offset, err := page(r)
+	if err != nil {
+		return err
+	}
+	var raw []byte
+	err = s.pool.QueryRow(r.Context(), `SELECT coalesce(jsonb_agg(v),'[]') FROM (SELECT p.id,p.amount,p.method,p.actor_id AS "actorId",p.created_at AS "createdAt" FROM payments p WHERE p.clinic_id=$1 AND p.invoice_id=$2 ORDER BY p.created_at,p.id LIMIT $3 OFFSET $4) v`, a.ClinicID, id, limit, offset).Scan(&raw)
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 200, json.RawMessage(raw))
+	return nil
+}
+
+type paymentInput struct {
+	Amount int64  `json:"amount"`
+	Method string `json:"method"`
+}
+
+func (s *Server) createPayment(w http.ResponseWriter, r *http.Request) error {
+	a, err := s.actor(r)
+	if err != nil {
+		return err
+	}
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	var in paymentInput
+	if err = decode(w, r, &in); err != nil {
+		return err
+	}
+	switch in.Method {
+	case "Efectivo", "Débito", "Crédito", "Transferencia":
+	default:
+		return fail(400, "invalid_method", "Medio de pago inválido")
+	}
+	if in.Amount < 1 || in.Amount > 1000000000 {
+		return fail(400, "invalid_amount", "Monto inválido")
+	}
+	return s.mutate(w, r, a, "facturas.emitir", in, 201, func(tx pgx.Tx, a Actor) (any, error) {
+		var total, paid int64
+		var owner string
+		if err := tx.QueryRow(r.Context(), "SELECT total,paid,owner_id FROM invoices WHERE id=$1 AND clinic_id=$2 FOR UPDATE", id, a.ClinicID).Scan(&total, &paid, &owner); err != nil {
+			return nil, err
+		}
+		if paid >= total {
+			return nil, fail(409, "already_paid", "La factura ya está pagada")
+		}
+		if in.Amount > total-paid {
+			return nil, fail(409, "overpayment", "El abono supera el saldo")
+		}
+		pid := domain.UUID()
+		if _, err := tx.Exec(r.Context(), "INSERT INTO payments(id,clinic_id,invoice_id,amount,method,actor_id) VALUES($1,$2,$3,$4,$5,$6)", pid, a.ClinicID, id, in.Amount, in.Method, a.UserID); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(r.Context(), "UPDATE invoices SET paid=paid+$2 WHERE id=$1", id, in.Amount); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(r.Context(), "UPDATE clinic_owners SET balance=balance-$2 WHERE clinic_id=$1 AND owner_id=$3", a.ClinicID, in.Amount, owner); err != nil {
+			return nil, err
+		}
+		if err := audit(r.Context(), tx, a, "payment.created", pid, map[string]any{"invoice": id, "amount": in.Amount}); err != nil {
+			return nil, err
+		}
+		return map[string]any{"id": pid, "invoiceId": id, "amount": in.Amount, "method": in.Method, "paid": paid + in.Amount, "remaining": total - paid - in.Amount}, nil
+	})
 }
 
 type invoiceLineInput struct {
@@ -143,6 +233,9 @@ func (s *Server) createInvoice(w http.ResponseWriter, r *http.Request) error {
 			return nil, err
 		}
 		if _, err = tx.Exec(r.Context(), "INSERT INTO invoices(id,clinic_id,owner_id,patient_id,number,net,vat,total,items,actor_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)", id, a.ClinicID, in.OwnerID, in.PatientID, number, money.Net, money.VAT, money.Total, itemsRaw, a.UserID); err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(r.Context(), "UPDATE clinic_owners SET balance=balance+$2 WHERE clinic_id=$1 AND owner_id=$3", a.ClinicID, money.Total, in.OwnerID); err != nil {
 			return nil, err
 		}
 		if err = audit(r.Context(), tx, a, "invoice.created", id, map[string]any{"number": number}); err != nil {

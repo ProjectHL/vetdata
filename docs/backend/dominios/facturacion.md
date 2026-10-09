@@ -43,19 +43,21 @@ Pantallas: vista rápida del paciente → "Facturar" (`care-actions/invoice-form
 2. **Folio** correlativo por clínica asignado por el servidor. Fuente: `mock/clinic.ts:invoices.create` (`nextNumber`), `store.tsx:addInvoice` (provisorio). *(regla)*
 3. **Medicamentos facturados salen del inventario**: por cada línea con `medicationId`, `StockMovement { type: Salida, reason: Venta, qty: −qty, ref: "Factura <folio>" }` y descuento de stock. Fuente: `mock/clinic.ts:invoices.create`, `store.tsx:addInvoice`. *(regla)* — **atómico** con la factura; con stock insuficiente → 409 (hoy se aplana a 0: `Math.max(0, …)`). La UI solo ofrece medicamentos con `stock > 0` (`invoice-form.tsx`), pero no valida la cantidad.
 4. **Precio de medicamento** en factura = `Medication.price` tratado como neto. *(supuesto del prototipo — ambiguo, `preguntas-abiertas.md#p-17`)*.
-5. **Estado**: nace `Emitida`; `Pagada` existe pero **no hay operación** para registrar pago. Fuente: `domain/invoices.ts:InvoiceStatus`; `Pagada` solo aparece en semillas y en `records.tsx`. *(hallazgo)* → `preguntas-abiertas.md#p-11`.
+5. **Estado**: nace `Emitida`; con `paid >= total` pasa a `Pagada` (derivado en la respuesta). Abonos vía `POST /api/v1/invoices/:id/payments` (T3-6). *(hallazgo resuelto)* → `preguntas-abiertas.md#p-11`.
 6. **Cobranza**: facturas `Emitida` + `Owner.balance > 0`, por antigüedad (0–30, 31–60, > 60 días; factura desde emisión, saldo desde última visita). Fuente: `src/lib/metrics/customers.ts:receivables`. *(regla de reporte)*. Tarea "Cobrar factura N°" por cada factura emitida (`lib/tasks.ts`).
 7. **Factura no es DTE**: no hay integración SII, ni RUT/razón social del receptor (solo `ownerRut` persona), ni giro, ni timbre. *(supuesto del prototipo)* → `preguntas-abiertas.md#p-12`.
 
 ## Estados
-`Emitida → Pagada` (sin operación). Anulación/nota de crédito no existe. Ver [`../estados.md`](../estados.md#factura).
+`Emitida → Pagada` (derivado de `paid`; abonos con `invoices.pay`). Anulación/nota de crédito no existe. Ver [`../estados.md`](../estados.md#factura).
 
 ## Operaciones y endpoints sugeridos
 | Operación (servicio) | Método y ruta | Entrada | Salida | Permiso | Errores | Auditoría / efectos |
 |---|---|---|---|---|---|---|
 | `clinic.listServices` | `GET /api/v1/billable-services` | — | `Service[]` | sesión | 401 | — |
 | `invoices.list` | `GET /api/v1/invoices` | — | `Invoice[]` de la clínica | `facturas.emitir` | 401, 403 | — |
-| `invoices.create` | `POST /api/v1/invoices` | `{ownerId, patientId?, lines:[{itemId, qty}]}` (precios siempre desde catálogo) | `Invoice` con folio único por clínica | `facturas.emitir` | 400, 403 (mascota sin acceso), 404, 409 (stock insuficiente/inactivo) | Atómico: factura + folio + kardex `Venta` FEFO con `reference_id`; reintento idempotente no duplica. Evento `invoice.created` |
+| `invoices.create` | `POST /api/v1/invoices` | `{ownerId, patientId?, lines:[{itemId, qty}]}` (precios siempre desde catálogo) | `Invoice` con folio único por clínica | `facturas.emitir` | 400, 403 (mascota sin acceso), 404, 409 (stock insuficiente/inactivo) | Atómico: factura + folio + kardex `Venta` FEFO con `reference_id`; suma deuda a `clinic_owners.balance`; reintento idempotente no duplica. Evento `invoice.created` |
+| `invoices.pay` | `POST /api/v1/invoices/:id/payments` | `{amount, method}` | abono con `paid`/`remaining`; `Pagada` al completar | `facturas.emitir` | 400, 404, 409 (sobrepago/ya pagada) | Atómico: pago + `paid` + resta de `balance`. Evento `payment.created` |
+| `invoices.listPayments` | `GET /api/v1/invoices/:id/payments` | — | abonos de la factura | `facturas.emitir` | 404 | — |
 
 ## Efectos en otros dominios
 - **Farmacia**: salida de stock por medicamento (kardex `Venta`), puede disparar `StockBajo`/tarea `stockmed`.

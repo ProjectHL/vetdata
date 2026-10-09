@@ -61,6 +61,8 @@ El contrato objetivo y sus entradas/salidas se especifican en [red-y-acceso](dom
 | 9 | `clinic.listServices` | GET | `/api/v1/billable-services` | sesión |  |
 | 13 | `invoices.list` | GET | `/api/v1/invoices` | `facturas.emitir` | Solo la clínica |
 | 14 | `invoices.create` | POST | `/api/v1/invoices` | `facturas.emitir` | Folio único por clínica; precios desde catálogo; kardex `Venta` FEFO atómico; 409 sin stock; reintento idempotente |
+| 14b | `invoices.pay` | POST | `/api/v1/invoices/:id/payments` | `facturas.emitir` | Abono parcial con medio; 409 sobrepago/ya pagada; mueve `paid` y `balance` |
+| 14c | `invoices.listPayments` | GET | `/api/v1/invoices/:id/payments` | `facturas.emitir` | Historial de abonos |
 
 ## farmacia (11)  — [detalle](dominios/farmacia.md)
 
