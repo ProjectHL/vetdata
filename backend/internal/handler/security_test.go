@@ -5,29 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"testing"
-
-	"github.com/vetdata/api/internal/domain"
-	"golang.org/x/crypto/bcrypt"
 )
-
-func (f *fixture) loginAs(t *testing.T, role string) []*http.Cookie {
-	t.Helper()
-	hash, _ := bcrypt.GenerateFromPassword([]byte("Test-password-123"), 4)
-	uid := domain.UUID()
-	email := "role-" + role + "@example.test"
-	ctx := context.Background()
-	if _, e := f.pool.Exec(ctx, "INSERT INTO users(id,name,email,password_hash,status) VALUES($1,'Role Test',$2,$3,'Activo')", uid, email, string(hash)); e != nil {
-		t.Fatal(e)
-	}
-	if _, e := f.pool.Exec(ctx, "INSERT INTO memberships(user_id,clinic_id,role) VALUES($1,$2,$3)", uid, f.clinic, role); e != nil {
-		t.Fatal(e)
-	}
-	w := f.request("POST", "/api/v1/auth/login", map[string]string{"email": email, "password": "Test-password-123", "clinicId": f.clinic})
-	if w.Code != 200 {
-		t.Fatal(w.Code, w.Body.String())
-	}
-	return w.Result().Cookies()
-}
 
 func createSecurityEvent(t *testing.T, f *fixture, cookies []*http.Cookie, body map[string]any) (int, map[string]any) {
 	t.Helper()
