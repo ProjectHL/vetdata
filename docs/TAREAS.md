@@ -31,16 +31,16 @@
 
 ## Fase 2 — Núcleo: identidad + red (diferencial)
 
-- [ ] T2-1 Usuarios/invitaciones/roles p-10+p-01: matriz por clínica, invitaciones con expiración, `lastAccess` timestamp, guarda anti-autobloqueo (409 si queda sin admin). Cambio owner-driven: muere `red.aprobar`; nuevo `red.suspender` (SOLO Admin origen, motivo obligatorio, auditado, notificado a dueño y B, reversible). `red.solicitar` = pedir (B)
-- [ ] T2-2 Regla acceso p-03+p-04: `accessLevel` (propio/compartido/ninguno) + `grantStatus` (Vigente/Revocado/Vencido derivado) aplicados en **cada** lectura de mascota/historial/listas/búsqueda/analítica local/tareas/boxes/agenda
-- [ ] T2-3 Alcance en servidor: proyección `Ficha completa` vs `Resumen clínico` (solo alergias + crónicas + vacunas), tarjeta mínima sin acceso + rate-limit + log búsquedas, 404 vs 403 según caso
-- [ ] T2-4 Solicitudes p-05 owner-driven: B pide con alcance+vigencia (pedidos) → email al dueño con link token un solo uso (hash en DB, expira 72h). Estados `Esperando dueño`/`Aprobada`/`Denegada`/`Expirada`/`Cancelada` por B. Una por mascota; 409 si propia, pendiente o grant vigente. Renovar = nueva solicitud linkeada + aviso 7 días. La origen NO aprueba, solo es notificada
-- [ ] T2-5 Consentimiento p-06 owner-driven: el dueño verifica RUT (DV) + aprueba/deniega/baja alcance (nunca mayor al pedido) vía link. Evidencia: token hash, IP, timestamp, método `email-link`. Revocar consentimiento mata grants. Muere el checkbox de la clínica declarando consentimiento ajeno
-- [ ] T2-6 Freno emergencia (ex-revocación): solo origen con `red.suspender` (Admin), motivo obligatorio, auditado, notificado a dueño y B, reversible. Ya no es revocación por criterio sino suspensión por causa objetiva (fraude, error grave, orden legal)
-- [ ] T2-7 Auditoría red p-07: insert en toda lectura `compartido` (usuario, clínica, mascota, alcance, hora), visible para origen Y dueño (quién vio la ficha de su mascota), retención 2-3 años
-- [ ] T2-8 Pendientes p-23: `GET /tasks` en servidor replicando `lib/tasks.ts`, mantener `taskId` con `:` codificado
-- [ ] T2-9 Desactivar vet p-25: 409 con lista citas futuras + reasignar/cancelar explícito; fix crear vet genera `doctorId`
-- [ ] T2-10 Salida fase: dos clínicas de prueba compartiendo una ficha con vigencia real
+- [x] T2-1 Usuarios/invitaciones/roles p-10+p-01: matriz por clínica, invitaciones con expiración, `lastAccess` timestamp, guarda anti-autobloqueo (409 si queda sin admin). Cambio owner-driven: muere `red.aprobar`; nuevo `red.suspender` (SOLO Admin origen, motivo obligatorio, auditado, notificado a dueño y B, reversible). `red.solicitar` = pedir (B)
+- [x] T2-2 Regla acceso p-03+p-04: `accessLevel` (propio/compartido/ninguno) + `grantStatus` (Vigente/Revocado/Vencido derivado) aplicados en **cada** lectura de mascota/historial/listas/búsqueda/analítica local/tareas/boxes/agenda
+- [x] T2-3 Alcance en servidor: proyección `Ficha completa` vs `Resumen clínico` (solo alergias + crónicas + vacunas), tarjeta mínima sin acceso + rate-limit + log búsquedas, 404 vs 403 según caso
+- [x] T2-4 Solicitudes p-05 owner-driven: B pide con alcance+vigencia (pedidos) → email al dueño con link token un solo uso (hash en DB, expira 72h). Estados `Esperando dueño`/`Aprobada`/`Denegada`/`Expirada`/`Cancelada` por B. Una por mascota; 409 si propia, pendiente o grant vigente. Renovar = nueva solicitud linkeada + aviso 7 días. La origen NO aprueba, solo es notificada
+- [x] T2-5 Consentimiento p-06 owner-driven: el dueño verifica RUT (DV) + aprueba/deniega/baja alcance (nunca mayor al pedido) vía link. Evidencia: token hash, IP, timestamp, método `email-link`. Revocar consentimiento mata grants. Muere el checkbox de la clínica declarando consentimiento ajeno
+- [x] T2-6 Freno emergencia (ex-revocación): solo origen con `red.suspender` (Admin), motivo obligatorio, auditado, notificado a dueño y B, reversible. Ya no es revocación por criterio sino suspensión por causa objetiva (fraude, error grave, orden legal)
+- [x] T2-7 Auditoría red p-07: insert en toda lectura `compartido` (usuario, clínica, mascota, alcance, hora), visible para origen Y dueño (quién vio la ficha de su mascota), retención 2-3 años
+- [x] T2-8 Pendientes p-23: `GET /tasks` en servidor replicando `lib/tasks.ts`, mantener `taskId` con `:` codificado
+- [x] T2-9 Desactivar vet p-25: 409 con lista citas futuras + reasignar/cancelar explícito; fix crear vet genera `doctorId`
+- [x] T2-10 Salida fase: dos clínicas de prueba compartiendo una ficha con vigencia real
 
 ## Fase 3 — Operación diaria
 

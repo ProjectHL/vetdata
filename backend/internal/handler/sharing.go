@@ -99,16 +99,8 @@ func (s *Server) sendRequests(w http.ResponseWriter, r *http.Request) error {
 			if pending {
 				return nil, fail(409, "pending_request", "Ya existe una solicitud pendiente para esta mascota")
 			}
-			var blocked bool
-			err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM sharing_grants WHERE patient_id=$1 AND granted_to=$2 AND revoked_at IS NULL
- AND (suspended_at IS NOT NULL OR until IS NULL OR until>=$3::date))`, pid, a.ClinicID, domain.LocalDate(domain.Now(r.Context()))).Scan(&blocked)
-			if err != nil {
-				return nil, err
-			}
-			if blocked {
-				return nil, fail(409, "existing_access", "Ya existe acceso vigente o suspendido")
-			}
 			var prevID any
+			renewal := false
 			if in.PreviousRequestID != nil {
 				var prevPatient, prevRequester, prevStatus string
 				err := tx.QueryRow(r.Context(), "SELECT patient_id,requesting_clinic_id,status FROM sharing_requests WHERE id=$1", *in.PreviousRequestID).Scan(&prevPatient, &prevRequester, &prevStatus)
@@ -122,16 +114,27 @@ func (s *Server) sendRequests(w http.ResponseWriter, r *http.Request) error {
 					return nil, fail(409, "pending_request", "Cancela la solicitud pendiente antes de renovar")
 				}
 				prevID = *in.PreviousRequestID
+				renewal = true
+			}
+			var blocked bool
+			err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM sharing_grants WHERE patient_id=$1 AND granted_to=$2 AND revoked_at IS NULL
+ AND (suspended_at IS NOT NULL OR until IS NULL OR until>=$3::date))`, pid, a.ClinicID, domain.LocalDate(domain.Now(r.Context()))).Scan(&blocked)
+			if err != nil {
+				return nil, err
+			}
+			if blocked && !renewal {
+				return nil, fail(409, "existing_access", "Ya existe acceso vigente o suspendido")
 			}
 			id, raw := domain.UUID(), token()
 			if _, err = tx.Exec(r.Context(), `INSERT INTO sharing_requests(id,patient_id,requesting_clinic_id,origin_clinic_id,requested_by,reason,scope,duration,token_hash,previous_request_id)
  VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`, id, pid, a.ClinicID, origin, a.UserID, in.Reason, in.Scope, in.Duration, digest(raw), prevID); err != nil {
 				return nil, err
 			}
-			message := notifications.Message{To: email, Subject: "Solicitud de acceso a ficha veterinaria", Body: requester + " solicita acceso a la ficha de " + name + ". Alcance: " + in.Scope + ". Vigencia: " + durationText(in.Duration) + ". El enlace expira en 72 horas.\n" + s.opt.Origin + "/owner/consent#request=" + id + "&token=" + raw}
+			message := notifications.Message{To: email, Subject: "Solicitud de acceso a ficha veterinaria", Body: requester + " solicita acceso a la ficha de " + name + ". Alcance: " + in.Scope + ". Vigencia: " + durationText(in.Duration) + ". El enlace expira en 72 horas."}
 			if prevID != nil {
-				message.Body += "\nRenovación de la solicitud " + *in.PreviousRequestID + "."
+				message.Body += " Renovación de la solicitud " + *in.PreviousRequestID + "."
 			}
+			message.Body += "\n" + s.opt.Origin + "/owner/consent#request=" + id + "&token=" + raw
 			if err = s.opt.Mail.Enqueue(r.Context(), tx, "sharing:"+id, message); err != nil {
 				return nil, err
 			}
@@ -309,9 +312,10 @@ func (s *Server) ownerDecision(w http.ResponseWriter, r *http.Request) error {
 	var pid, origin, target, owner, scope, status string
 	var duration *int
 	var expires time.Time
-	err = tx.QueryRow(r.Context(), `SELECT q.patient_id,q.origin_clinic_id,q.requesting_clinic_id,p.owner_id,q.scope,q.duration,q.status,q.expires_at
+	var previous *string
+	err = tx.QueryRow(r.Context(), `SELECT q.patient_id,q.origin_clinic_id,q.requesting_clinic_id,p.owner_id,q.scope,q.duration,q.status,q.expires_at,q.previous_request_id
  FROM sharing_requests q JOIN patients p ON p.id=q.patient_id JOIN owners o ON o.id=p.owner_id
- WHERE q.id=$1 AND q.token_hash=$2 AND o.rut=$3 FOR UPDATE OF q`, id, digest(in.Token), rut).Scan(&pid, &origin, &target, &owner, &scope, &duration, &status, &expires)
+ WHERE q.id=$1 AND q.token_hash=$2 AND o.rut=$3 FOR UPDATE OF q`, id, digest(in.Token), rut).Scan(&pid, &origin, &target, &owner, &scope, &duration, &status, &expires, &previous)
 	if err == pgx.ErrNoRows {
 		return fail(400, "invalid_token", "Enlace o verificación inválidos")
 	}
@@ -331,7 +335,7 @@ func (s *Server) ownerDecision(w http.ResponseWriter, r *http.Request) error {
 		if err = tx.QueryRow(r.Context(), `SELECT EXISTS(SELECT 1 FROM sharing_grants WHERE patient_id=$1 AND granted_to=$2 AND revoked_at IS NULL AND (suspended_at IS NOT NULL OR until IS NULL OR until>=$3::date))`, pid, target, domain.LocalDate(domain.Now(r.Context()))).Scan(&blocked); err != nil {
 			return err
 		}
-		if blocked {
+		if blocked && previous == nil {
 			return fail(409, "existing_access", "Existe acceso vigente o suspendido")
 		}
 		gid := domain.UUID()

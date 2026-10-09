@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 func setupSharing(t *testing.T) (*fixture, []*http.Cookie, []*http.Cookie, string, string) {
@@ -205,6 +206,180 @@ func lastMarker(t *testing.T, f *fixture, ctx context.Context, marker string) st
 	}
 	t.Fatal("no token mail")
 	return ""
+}
+func TestPhaseTwoExitTwoClinicsShareRecord(t *testing.T) {
+	f, own, other, pid, oid := setupSharing(t)
+	ctx := context.Background()
+	hash, _ := bcrypt.GenerateFromPassword([]byte("Test-password-123"), 4)
+	vetUID := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO users(id,name,email,password_hash,status) VALUES($1,'Vet','vet3@example.test',$2,'Activo')", vetUID, string(hash)); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "INSERT INTO memberships(user_id,clinic_id,role) VALUES($1,$2,'Veterinario')", vetUID, f.other); e != nil {
+		t.Fatal(e)
+	}
+	w := f.request("POST", "/api/v1/auth/login", map[string]string{"email": "vet3@example.test", "password": "Test-password-123", "clinicId": f.other})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	vet := w.Result().Cookies()
+	dur := 30
+	w = f.request("POST", "/api/v1/sharing/requests", sharingInput{PatientIDs: []string{pid}, Scope: "Ficha completa", Duration: &dur, Reason: "Continuidad clínica"}, other...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var qs []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid := qs[0]["id"].(string)
+	raw := lastToken(t, f, ctx)
+	w = f.request("POST", "/api/v1/owner/sharing/requests/"+qid+"/decision", map[string]any{"token": raw, "rut": "12345678-5", "approve": true, "scope": "Ficha completa"})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var response struct {
+		Grant struct {
+			ID string `json:"id"`
+		} `json:"grant"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
+	gid := response.Grant.ID
+	var since, until time.Time
+	var scope string
+	if err := f.pool.QueryRow(ctx, "SELECT since,until,scope FROM sharing_grants WHERE id=$1", gid).Scan(&since, &until, &scope); err != nil {
+		t.Fatal(err)
+	}
+	if until.Sub(since) != 30*24*time.Hour || scope != "Ficha completa" {
+		t.Fatal("real validity", since, until, scope)
+	}
+	w = f.request("GET", "/api/v1/patients/"+pid, nil, other...)
+	body := w.Body.String()
+	if w.Code != 200 || !strings.Contains(body, "consultations") || !strings.Contains(body, "secret diagnosis") || !strings.Contains(body, "secret-chip") {
+		t.Fatal("full scope", w.Code)
+	}
+	w = f.request("GET", "/api/v1/patients/"+pid, nil, vet...)
+	body = w.Body.String()
+	if w.Code != 200 || !strings.Contains(body, "test allergy") || !strings.Contains(body, "vaccines") {
+		t.Fatal("resumen scope", w.Code)
+	}
+	for _, leak := range []string{"secret diagnosis", "secret-chip", "ownerRut", "consultations"} {
+		if strings.Contains(body, leak) {
+			t.Fatal("grant adds no permission", leak)
+		}
+	}
+	w = f.request("POST", "/api/v1/sharing/grants/"+gid+"/suspend", map[string]string{"reason": "Fraude"}, own...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/patients/"+pid, nil, other...)
+	if w.Code != 404 {
+		t.Fatal("suspended read", w.Code)
+	}
+	w = f.request("POST", "/api/v1/sharing/grants/"+gid+"/restore", map[string]string{"reason": "Aclarado"}, own...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/patients/"+pid, nil, other...)
+	if w.Code != 200 {
+		t.Fatal("restored read", w.Code)
+	}
+	w = f.request("POST", "/api/v1/patients", patientInput{OwnerID: oid, Name: "Race patient", Species: "Gato", Sex: "Hembra", BirthDate: "2021-06-06", Chip: "", Allergies: []string{}}, own...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var p map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &p)
+	pid2 := p["id"].(string)
+	w = f.request("POST", "/api/v1/sharing/requests", sharingInput{PatientIDs: []string{pid2}, Scope: "Ficha completa", Reason: "Continuidad clínica"}, other...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid2 := qs[0]["id"].(string)
+	raw2 := lastToken(t, f, ctx)
+	codes := make(chan int, 8)
+	for i := 0; i < 8; i++ {
+		go func() {
+			r := f.request("POST", "/api/v1/owner/sharing/requests/"+qid2+"/decision", map[string]any{"token": raw2, "rut": "12345678-5", "approve": true, "scope": "Ficha completa"})
+			codes <- r.Code
+		}()
+	}
+	ok, conflict := 0, 0
+	for i := 0; i < 8; i++ {
+		if c := <-codes; c == 200 {
+			ok++
+		} else if c == 409 {
+			conflict++
+		} else {
+			t.Fatal("race code", c)
+		}
+	}
+	if ok != 1 || conflict != 7 {
+		t.Fatal("race", ok, conflict)
+	}
+	var n int
+	if err := f.pool.QueryRow(ctx, "SELECT count(*) FROM sharing_grants WHERE patient_id=$1", pid2).Scan(&n); err != nil || n != 1 {
+		t.Fatal("race grant", n, err)
+	}
+	w = f.request("POST", "/api/v1/sharing/requests", map[string]any{"patientIds": []string{pid}, "scope": "Ficha completa", "duration": 30, "reason": "Renovación", "previousRequestId": qid}, other...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid3 := qs[0]["id"].(string)
+	raw3 := lastToken(t, f, ctx)
+	w = f.request("POST", "/api/v1/owner/sharing/requests/"+qid3+"/decision", map[string]any{"token": raw3, "rut": "12345678-5", "approve": true, "scope": "Ficha completa"})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var response3 struct {
+		Grant struct {
+			ID string `json:"id"`
+		} `json:"grant"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &response3)
+	gid3 := response3.Grant.ID
+	var since2, until2 time.Time
+	var scope2 string
+	if err := f.pool.QueryRow(ctx, "SELECT since,until,scope FROM sharing_grants WHERE id=$1", gid).Scan(&since2, &until2, &scope2); err != nil {
+		t.Fatal(err)
+	}
+	if !since2.Equal(since) || !until2.Equal(until) || scope2 != scope {
+		t.Fatal("old grant changed", since2, until2, scope2)
+	}
+	w = f.request("POST", "/api/v1/owner/auth/request", map[string]string{"rut": "12345678-5", "email": "owner@example.test"})
+	if w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	loginToken := lastMarker(t, f, ctx, "#token=")
+	w = f.request("POST", "/api/v1/owner/auth/verify", map[string]string{"rut": "12345678-5", "token": loginToken})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	owner := w.Result().Cookies()
+	w = f.request("POST", "/api/v1/owner/sharing/grants/"+gid+"/revoke", nil, owner...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/owner/sharing/grants/"+gid3+"/revoke", nil, owner...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/patients/"+pid, nil, other...)
+	if w.Code != 404 {
+		t.Fatal("revoked read", w.Code)
+	}
+	w = f.request("POST", "/api/v1/sharing/grants/"+gid+"/restore", map[string]string{"reason": "must not"}, own...)
+	if w.Code != 409 {
+		t.Fatal("revive revoked", w.Code)
+	}
+	w = f.request("PATCH", "/api/v1/tasks/solicitud%3A"+qid, map[string]any{"done": true}, vet...)
+	if w.Code != 403 {
+		t.Fatal("task without permission", w.Code)
+	}
+	var audits int
+	if err := f.pool.QueryRow(ctx, "SELECT count(*) FROM shared_read_audit WHERE patient_id=$1", pid).Scan(&audits); err != nil || audits != 3 {
+		t.Fatal("audit trail", audits, err)
+	}
 }
 func TestSharedReadAuditVisibleToOriginAndOwner(t *testing.T) {
 	f, own, other, pid, oid := setupSharing(t)
