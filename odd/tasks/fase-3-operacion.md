@@ -17,7 +17,7 @@ Entrada: Fase 2 firmada (`docs/roadmap/cierre-fase-02.md`).
 - [ ] T3-5 Farmacia: receta vigente, dispense atómico, OC, ajustes, movement_lot, recepción parcial
 - [x] T3-6 Pagos manuales + saldo + Pagada
 - [x] T3-7 Notificaciones: capa abstracta + recordatorio citas (preferredContact + opt-out)
-- [ ] T3-8 Modelo attachments con herencia de alcance
+- [x] T3-8 Modelo attachments con herencia de alcance
 - [ ] T3-9 Salida fase: agenda → atiende → deriva → dispensa → factura → abono por API
 
 ## Progreso
@@ -29,3 +29,4 @@ Entrada: Fase 2 firmada (`docs/roadmap/cierre-fase-02.md`).
 - 2026-10-09: T3-5 parcial — derivaciones internas + `dispense` atómico + receta en factura (`POST /pharmacy/referrals`, `POST /pharmacy/referrals/:id/dispense`, flag `prescription_required` migración 006, helper `deductLots` reutilizado en factura) + `TestReferralsDispenseAndInvoiceGate` PASS + suite completa verde. Aprendizajes: DATE no se escanea en string (usar time.Time); parámetro sin tipo en `jsonb_build_object` da 42P18 (castear `$4::text`); `id=ANY($2)` con uuid exige `::uuid[]`. Falta: bandeja recibidas externa (bloqueada en D-02).
 - 2026-10-09: T3-6 cerrada — `POST /api/v1/invoices/:id/payments` + historial + `TestInvoicePaymentsPartialAndBalance` PASS (abono parcial, medio/monto inválidos, sobrepago 409, 2×7000 concurrentes sobre 7900 → 1x201+1x409, Pagada al completar, balance dueño acompaña factura y pagos, tenant aislado) + suite completa verde. Decisión: la factura suma deuda a `clinic_owners.balance` y el pago la resta (p-11 decía que nunca se movía).
 - 2026-10-09: T3-7 cerrada — recordatorios sobre outbox abstracto (`POST /appointments/:id/remind`, `POST /owners/:rut/contact` con opt-out migración 007) + `TestAppointmentRemindersRespectContactAndOptOut` PASS (envío real vía DeliverOne, reintento no duplica, opt-out suprime pendiente y bloquea, canal no-Email se respeta, cancelada 409 y borra pendiente, validaciones) + suite completa verde. Solo Email enviable en el slice (WhatsApp/Teléfono vía capa futura).
+- 2026-10-09: T3-8 cerrada — adjuntos solo-metadatos con herencia de alcance (`GET/POST .../attachments`, `PATCH /attachments/:id`, migración 008 `actor_id`) + `TestAttachmentsInheritScope` PASS (cuarentena oculta a compartido, Resumen solo vacunas, moderación terminal, 400/403/404/409, storageKey único) + suite completa verde. Storage real (S3) diferido. Aprendizaje: la tabla no traía `actor_id` (migración necesaria); `treatment: ""` falla validación (mínimo 1 si presente).

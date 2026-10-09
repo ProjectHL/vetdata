@@ -51,7 +51,7 @@
 - [ ] T3-5 Farmacia p-13+p-24: derivaciones con bandeja "recibidas" por definir, firma simple = usuario autenticado, verificar receta vigente al dispensar/facturar, `dispense` atómico, OC (crear/enviar/recibir) atómica, ajustes con movimiento, costo real proveedor, modelo `movement_lot` (lote único en MVP), recepción parcial en esta fase conforme a p-24
 - [x] T3-6 Pagos p-11: registro manual (abonos parciales, medio, saldo dueño, `Pagada`), pasarela/arqueo después
 - [x] T3-7 Notificaciones slice p-08: capa `notifications` abstracta + email transaccional, solo recordatorio citas, respetar `preferredContact` + opt-out
-- [ ] T3-8 Modelo adjuntos p-20: tabla `attachments` que hereda regla red/alcance (implementación S3/cloud/folder diferida)
+- [x] T3-8 Modelo adjuntos p-20: tabla `attachments` que hereda regla red/alcance (implementación S3/cloud/folder diferida)
 - [ ] T3-9 Salida fase: flujo vet completo agenda → atiende → deriva → dispensa → factura
 
 ## Fase 4 — Tienda + seguridad + soporte + analítica

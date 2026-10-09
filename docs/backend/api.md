@@ -73,6 +73,9 @@ El contrato objetivo y sus entradas/salidas se especifican en [red-y-acceso](dom
 | 15 | `referrals.list` | GET | `/api/v1/pharmacy/referrals` | `farmacia.dispensar` | Solo la clínica |
 | 16 | `referrals.create` | POST | `/api/v1/pharmacy/referrals` | `medicamentos.derivar` | Receta vigente de la mascota, solo medicamentos activos; `expiresOn` default +30 días |
 | 17 | `referrals.dispense` | POST | `/api/v1/pharmacy/referrals/:id/dispense` | `farmacia.dispensar` | Verifica vigencia y receta no anulada; descuenta FEFO atómico con kardex `Dispensación`; una sola vez |
+| 17b | `attachments.list` | GET | `/api/v1/patients/:pid/records/:rid/attachments` | sesión (+ alcance) | Hereda alcance: Resumen solo vacunas; compartido solo `clean` |
+| 17c | `attachments.register` | POST | `/api/v1/patients/:pid/records/:rid/attachments` | `ficha.editar` | Solo metadatos (storage diferido); nace en cuarentena |
+| 17d | `attachments.moderate` | PATCH | `/api/v1/attachments/:id` | `ficha.editar` | `quarantine → clean/rejected`, terminal |
 | 25 | `pharmacy.listMedications` | GET | `/api/v1/pharmacy/medications` | sesión |  |
 | 26 | `pharmacy.listMovements` | GET | `/api/v1/pharmacy/movements` | `farmacia.dispensar` o `farmacia.inventario` *(propuesto)* |  |
 | 27 | `pharmacy.adjustStock` | POST | `/api/v1/pharmacy/movements` | `farmacia.inventario` | ajuste manual (merma, vencimiento…); Solo Merma/Vencimiento, negativo |

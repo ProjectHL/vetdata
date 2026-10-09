@@ -240,6 +240,7 @@ func (s *Server) clinicalRoutes(m *http.ServeMux) {
 	s.route(m, "GET /api/v1/owners/{rut}", s.getOwner)
 	s.route(m, "POST /api/v1/owners", s.createOwner)
 	s.route(m, "POST /api/v1/owners/{rut}/contact", s.updateOwnerContact)
+	s.attachmentRoutes(m)
 	s.route(m, "GET /api/v1/network/search", s.searchNetwork)
 }
 
