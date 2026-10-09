@@ -60,7 +60,7 @@
 - [ ] T4-2 Seguridad p-26 CERRADO: eventos crear/actualizar/nota con `seguridad.ver`, cerrar/falsa-alarma con `seguridad.administrar`, `resolvedAt` inmutable, sin reapertura (evento nuevo linkeado); auditoría append-only generada por servidor al entregar recurso (en vivo, grabación, export con hash), `logAudit` sin POST cliente
 - [ ] T4-3 Soporte p-18: tickets + ideas + `proposeIdea` atómico (idea+ticket), rol `VetData Staff` fuera de tenant + `/admin` mínimo (tickets, ideas, releases, alta clínicas), SLA horas corridas, eliminar `simulateSupportReply` y "Ver como" de prod
 - [ ] T4-4 Analítica p-21 CERRADO: KPIs en servidor, job diario, k≥5, default-on anonimizado con opt-out, base sector dueño, texto VetData, sin fichas/dueños ajenos
-- [ ] T4-5 Roles custom p-10: evaluar recién aquí (MVP sigue con 4 fijos)
+- [x] T4-5 Roles custom p-10: EVALUADO 2026-10-09 — se difiere. MVP sigue con 4 fijos (Admin, Veterinario, Recepción, Farmacia); el ajuste por clínica ya existe vía `role_permissions` (toggle por rol+permiso con `usuarios.administrar` + anti-autobloqueo 409). Roles con nombres nuevos implican matriz UI, validación y riesgo de lockout sin pedido de usuarios: no es faltante del MVP.
 - [ ] T4-6 Salida fase: 10 dominios con endpoints reales y 403 funcionando
 
 ## Fase 5 — Integración frontend (la más larga, toda `TODO(api)`)
