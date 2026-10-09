@@ -203,6 +203,76 @@ func lastToken(t *testing.T, f *fixture, ctx context.Context) string {
 	t.Fatal("no token mail")
 	return ""
 }
+func TestEmergencySuspensionTransitionsAndNotifications(t *testing.T) {
+	f, own, other, pid, _ := setupSharing(t)
+	ctx := context.Background()
+	w := f.request("POST", "/api/v1/sharing/requests", sharingInput{PatientIDs: []string{pid}, Scope: "Ficha completa", Reason: "Continuidad clínica"}, other...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var qs []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &qs)
+	qid := qs[0]["id"].(string)
+	raw := lastToken(t, f, ctx)
+	w = f.request("POST", "/api/v1/owner/sharing/requests/"+qid+"/decision", map[string]any{"token": raw, "rut": "12345678-5", "approve": true, "scope": "Ficha completa"})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var response struct {
+		Grant struct {
+			ID string `json:"id"`
+		} `json:"grant"`
+	}
+	_ = json.Unmarshal(w.Body.Bytes(), &response)
+	gid := response.Grant.ID
+	suspend := func(cookies []*http.Cookie, reason string) *httptest.ResponseRecorder {
+		return f.request("POST", "/api/v1/sharing/grants/"+gid+"/suspend", map[string]string{"reason": reason}, cookies...)
+	}
+	restore := func(cookies []*http.Cookie, reason string) *httptest.ResponseRecorder {
+		return f.request("POST", "/api/v1/sharing/grants/"+gid+"/restore", map[string]string{"reason": reason}, cookies...)
+	}
+	if w = suspend(own, ""); w.Code != 422 {
+		t.Fatal("empty reason", w.Code)
+	}
+	if w = suspend(other, "Error de identidad"); w.Code != 404 {
+		t.Fatal("recipient suspension", w.Code)
+	}
+	if w = suspend(own, "Fraude confirmado"); w.Code != 200 || !strings.Contains(w.Body.String(), `"suspended":true`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w = suspend(own, "Otra causa"); w.Code != 409 {
+		t.Fatal("double suspension", w.Code)
+	}
+	if w = restore(other, "Verificado"); w.Code != 404 {
+		t.Fatal("recipient restore", w.Code)
+	}
+	if w = restore(own, "Causa aclarada"); w.Code != 200 || !strings.Contains(w.Body.String(), `"suspended":false`) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if w = restore(own, "Otra vez"); w.Code != 409 {
+		t.Fatal("double restore", w.Code)
+	}
+	if _, err := f.pool.Exec(ctx, "UPDATE sharing_grants SET since='2020-01-01',until='2020-01-02' WHERE id=$1", gid); err != nil {
+		t.Fatal(err)
+	}
+	if w = suspend(own, "Tarde"); w.Code != 409 || !strings.Contains(w.Body.String(), "inactive_grant") {
+		t.Fatal("suspend expired", w.Code, w.Body.String())
+	}
+	for i := 0; i < 10; i++ {
+		if _, err := f.mail.DeliverOne(ctx); err != nil {
+			t.Fatal(err)
+		}
+	}
+	ownerNotified := false
+	for _, m := range f.sender.messages {
+		if m.To == "owner@example.test" {
+			ownerNotified = true
+		}
+	}
+	if !ownerNotified {
+		t.Fatal("owner not notified")
+	}
+}
 func TestOwnerDecisionDeniesAndRecordsEvidence(t *testing.T) {
 	f, own, other, pid, oid := setupSharing(t)
 	ctx := context.Background()
