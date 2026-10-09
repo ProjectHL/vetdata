@@ -7,14 +7,225 @@ import (
 	"github.com/vetdata/api/internal/domain"
 	"net/http"
 	"net/mail"
+	"regexp"
 	"strings"
 	"time"
 )
+
+var diagnosisPatterns = []struct {
+	name string
+	re   *regexp.Regexp
+}{
+	{"Dermatológico", regexp.MustCompile(`(?i)derma|alopecia|piel|pulga`)},
+	{"Digestivo", regexp.MustCompile(`(?i)gastro|estasis|digest|vómit`)},
+	{"Osteoarticular", regexp.MustCompile(`(?i)displasia|artrosis|cadera|cojera`)},
+	{"Respiratorio", regexp.MustCompile(`(?i)respirat|braquic|tos`)},
+	{"Dental", regexp.MustCompile(`(?i)dental|periodont|incisivo`)},
+	{"Renal / urinario", regexp.MustCompile(`(?i)renal|urin`)},
+	{"Cardiológico", regexp.MustCompile(`(?i)card|soplo`)},
+	{"Endocrino", regexp.MustCompile(`(?i)tiroid`)},
+}
+
+func diagnosisCategory(diagnosis string) string {
+	for _, c := range diagnosisPatterns {
+		if c.re.MatchString(diagnosis) {
+			return c.name
+		}
+	}
+	return "Preventivo / sano"
+}
+
+func recordString(payload map[string]any, key string, min, max int) (string, error) {
+	v, ok := payload[key].(string)
+	if !ok || len(strings.TrimSpace(v)) < min || len(v) > max {
+		return "", fail(400, "invalid_record", "Campo "+key+" inválido")
+	}
+	return v, nil
+}
+
+func recordDate(ctx context.Context, payload map[string]any, key string, allowFuture bool) (string, error) {
+	v, err := recordString(payload, key, 10, 10)
+	if err != nil {
+		return "", err
+	}
+	if _, err = domain.CivilDate(v); err != nil {
+		return "", fail(400, "invalid_record", "Campo "+key+" inválido")
+	}
+	if !allowFuture && v > domain.LocalDate(domain.Now(ctx)) {
+		return "", fail(400, "future_date", "La fecha no puede ser futura")
+	}
+	return v, nil
+}
+
+func validateRecordPayload(ctx context.Context, kind string, payload map[string]any) (map[string]any, error) {
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	out := map[string]any{}
+	switch kind {
+	case "consultation":
+		for _, key := range []string{"date", "doctor", "reason", "diagnosis", "treatment"} {
+			if _, ok := payload[key]; !ok && key == "treatment" {
+				out[key] = ""
+				continue
+			}
+			v, err := recordString(payload, key, 1, 2000)
+			if err != nil {
+				return nil, err
+			}
+			out[key] = v
+		}
+		if _, err := recordDate(ctx, payload, "date", false); err != nil {
+			return nil, err
+		}
+		out["date"] = payload["date"]
+		if doctor, err := recordString(payload, "doctor", 1, 200); err != nil {
+			return nil, err
+		} else {
+			out["doctor"] = doctor
+		}
+		out["category"] = diagnosisCategory(out["diagnosis"].(string))
+	case "vaccine":
+		name, err := recordString(payload, "name", 1, 200)
+		if err != nil {
+			return nil, err
+		}
+		out["name"] = name
+		date, err := recordDate(ctx, payload, "date", false)
+		if err != nil {
+			return nil, err
+		}
+		out["date"] = date
+		if raw, ok := payload["nextDose"]; ok && raw != nil && raw != "" {
+			next, err := recordDate(ctx, map[string]any{"nextDose": raw}, "nextDose", true)
+			if err != nil {
+				return nil, err
+			}
+			out["nextDose"] = next
+		}
+	case "exam":
+		name, err := recordString(payload, "name", 1, 200)
+		if err != nil {
+			return nil, err
+		}
+		out["name"] = name
+		date, err := recordDate(ctx, payload, "date", false)
+		if err != nil {
+			return nil, err
+		}
+		out["date"] = date
+		result, err := recordString(payload, "result", 1, 2000)
+		if err != nil {
+			return nil, err
+		}
+		out["result"] = result
+	case "prescription":
+		date, err := recordDate(ctx, payload, "date", false)
+		if err != nil {
+			return nil, err
+		}
+		out["date"] = date
+		for _, key := range []string{"drug", "dose", "duration", "doctor"} {
+			v, err := recordString(payload, key, 1, 200)
+			if err != nil {
+				return nil, err
+			}
+			out[key] = v
+		}
+	case "correction", "annulment":
+		if raw, ok := payload["note"]; ok && raw != nil && raw != "" {
+			note, err := recordString(payload, "note", 1, 2000)
+			if err != nil {
+				return nil, err
+			}
+			out["note"] = note
+		}
+	default:
+		return nil, fail(400, "invalid_kind", "Tipo de registro inválido")
+	}
+	return out, nil
+}
+
+func (s *Server) createRecord(w http.ResponseWriter, r *http.Request) error {
+	a, err := s.actor(r)
+	if err != nil {
+		return err
+	}
+	id, err := pathID(r)
+	if err != nil {
+		return err
+	}
+	var in struct {
+		Kind     string         `json:"kind"`
+		Payload  map[string]any `json:"payload"`
+		Corrects *string        `json:"correctsId"`
+	}
+	if err = decode(w, r, &in); err != nil {
+		return err
+	}
+	switch in.Kind {
+	case "consultation", "vaccine", "exam", "prescription", "correction", "annulment":
+	default:
+		return fail(400, "invalid_kind", "Tipo de registro inválido")
+	}
+	return s.mutate(w, r, a, "ficha.editar", in, 201, func(tx pgx.Tx, a Actor) (any, error) {
+		v, err := patientAccess(r.Context(), tx, a, id)
+		if err != nil {
+			return nil, err
+		}
+		if v.Level != "propio" && !(v.Level == "compartido" && v.Scope == "Ficha completa") {
+			return nil, fail(403, "forbidden_write", "El alcance no permite registrar en esta ficha")
+		}
+		payload, err := validateRecordPayload(r.Context(), in.Kind, in.Payload)
+		if err != nil {
+			return nil, err
+		}
+		var corrects *string
+		if in.Kind == "correction" || in.Kind == "annulment" {
+			if in.Corrects == nil || !domain.ValidID(*in.Corrects) {
+				return nil, fail(400, "corrects_required", "La corrección o anulación indica el registro que corrige")
+			}
+			var clinic, targetKind string
+			if err = tx.QueryRow(r.Context(), "SELECT clinic_id,kind FROM clinical_records WHERE id=$1 AND patient_id=$2", *in.Corrects, id).Scan(&clinic, &targetKind); err != nil {
+				if err == pgx.ErrNoRows {
+					return nil, fail(404, "unknown_record", "Registro a corregir inexistente")
+				}
+				return nil, err
+			}
+			if clinic != a.ClinicID {
+				return nil, fail(403, "foreign_record", "Solo la clínica autora corrige o anula sus registros")
+			}
+			if targetKind == "correction" || targetKind == "annulment" {
+				return nil, fail(409, "invalid_target", "No se corrige una corrección; crea un evento nuevo")
+			}
+			corrects = in.Corrects
+		} else if in.Corrects != nil {
+			return nil, fail(400, "unexpected_corrects", "El evento nuevo no corrige otro registro")
+		}
+		rid := domain.UUID()
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return nil, err
+		}
+		if _, err = tx.Exec(r.Context(), "INSERT INTO clinical_records(id,patient_id,clinic_id,actor_id,kind,payload,corrects_id) VALUES($1,$2,$3,$4,$5,$6,$7)", rid, id, a.ClinicID, a.UserID, in.Kind, raw, corrects); err != nil {
+			return nil, err
+		}
+		if err = audit(r.Context(), tx, a, "record.created", rid, map[string]string{"kind": in.Kind}); err != nil {
+			return nil, err
+		}
+		var created time.Time
+		if err = tx.QueryRow(r.Context(), "SELECT created_at FROM clinical_records WHERE id=$1", rid).Scan(&created); err != nil {
+			return nil, err
+		}
+		return map[string]any{"id": rid, "patientId": id, "clinicId": a.ClinicID, "actorId": a.UserID, "kind": in.Kind, "payload": payload, "correctsId": corrects, "createdAt": created.In(domain.Santiago)}, nil
+	})
+}
 
 func (s *Server) clinicalRoutes(m *http.ServeMux) {
 	s.route(m, "GET /api/v1/patients", s.listPatients)
 	s.route(m, "GET /api/v1/patients/{id}", s.getPatient)
 	s.route(m, "POST /api/v1/patients", s.createPatient)
+	s.route(m, "POST /api/v1/patients/{id}/records", s.createRecord)
 	s.route(m, "GET /api/v1/owners/{rut}/patients", s.listPatients)
 	s.route(m, "GET /api/v1/owners", s.listOwners)
 	s.route(m, "GET /api/v1/owners/{rut}", s.getOwner)

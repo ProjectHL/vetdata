@@ -8,7 +8,7 @@
 ## Propósito
 Ficha de la mascota (identificación, alergias, condiciones, consultas, vacunas, exámenes, recetas) y del propietario (identificado por RUT). Pantallas: `/pacientes/mascotas`, `/pacientes/propietarios`, `/pacientes/propietarios/[rut]`, `/pacientes/historial`, `/pacientes/historial/[id]`, vista rápida del paciente (`components/care-actions/patient-quick-view.tsx`).
 
-**Importante**: en el prototipo este dominio es de **solo lectura**. No hay operaciones para crear/editar mascotas, dueños, consultas, vacunas, exámenes ni recetas, aunque existe el permiso `ficha.editar` ("Registrar consultas, diagnósticos y tratamientos"). Ver `preguntas-abiertas.md#p-22`.
+**Importante**: en el prototipo este dominio es de **solo lectura**. En el backend existen `POST /api/v1/owners`, `POST /api/v1/patients` y `POST /api/v1/patients/:id/records` (T3-2, permiso `ficha.editar`): eventos append-only con corrección/anulación solo de la clínica autora. `PatientStatus` sigue pendiente (D-03). Ver `preguntas-abiertas.md#p-22`.
 
 ## Entidades
 
@@ -81,6 +81,7 @@ Relaciones: Owner 1—N Patient (`ownerRut`). Patient N—1 Clinic (origen).
 | `patients.list` | `GET /api/v1/patients` | filtros: especie, estado, dueño, origen (`propio`/`compartido`), texto | `Patient[]` proyectados por acceso/alcance/permiso, con `accessLevel` y `grant` (recomendado) | sesión | 401 | — |
 | `patients.get` | `GET /api/v1/patients/:id` | — | `Patient` proyectado; si `ninguno` → tarjeta mínima o 403 | sesión (+ `ficha.ver` para secciones clínicas) | 403, 404 | Si `compartido`: registrar acceso de red (auditoría) |
 | `patients.listByOwner` | `GET /api/v1/owners/:rut/patients` | RUT normalizado | `Patient[]` proyectados | sesión | 400 (RUT inválido), 404 | — |
+| `patients.addRecord` | `POST /api/v1/patients/:id/records` | `{kind, payload, correctsId?}` | registro creado con `category` en consultas | `ficha.editar` | 400, 403 (Resumen o registro ajeno), 404, 409 | `record.created`; trigger impide UPDATE/DELETE |
 | `owners.list` | `GET /api/v1/owners` | filtros: texto, sector | `Owner[]` con ≥ 1 mascota visible para mi clínica | sesión | 401 | — |
 | `owners.get` | `GET /api/v1/owners/:rut` | RUT | `Owner` (completo si tiene mascota visible; mínimo si solo para pedir acceso) | sesión | 400, 404 | — |
 

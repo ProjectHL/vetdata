@@ -30,6 +30,7 @@ El contrato objetivo y sus entradas/salidas se especifican en [red-y-acceso](dom
 | 1 | `patients.list` | GET | `/api/v1/patients` | sesión (+`ficha.ver` para secciones clínicas) | Filtrar por acceso de red |
 | 2 | `patients.get` | GET | `/api/v1/patients/:id` | sesión (+`ficha.ver` para secciones clínicas) | Proyección por alcance; auditar si compartido |
 | 3 | `patients.listByOwner` | GET | `/api/v1/owners/:rut/patients` | sesión | Filtrar por acceso de red |
+| 3b | `patients.addRecord` | POST | `/api/v1/patients/:id/records` | `ficha.editar` | Append-only (consulta/vacuna/examen/receta/corrección/anulación); corrección solo de la clínica autora; 403 con Resumen clínico |
 | 4 | `owners.list` | GET | `/api/v1/owners` | sesión | Solo dueños con mascota visible |
 | 5 | `owners.get` | GET | `/api/v1/owners/:rut` | sesión | Validar RUT |
 

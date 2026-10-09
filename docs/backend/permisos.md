@@ -77,7 +77,7 @@ Fuente base: `src/mocks/settings.ts:defaultRolePermissions` (`Admin: all`), con 
 Lecturas con permiso propuesto (contienen datos sensibles o financieros): `invoices.list`, `pharmacy.listMovements`, `pharmacy.listPurchaseOrders`, `retail.listSales`, `retail.listMovements`, `retail.listOrders`, `retail.listShipments`, `support.listTickets` (scope all), `support.getTicket`, `security.listCameras`, `security.listDevices`, `security.getNvrStorage`, `security.listEvents`, `security.listAudit`, `security.listAccess`, `security.getSettings`, `analytics.monthlyRevenue`, `analytics.revenueByLine`, `analytics.boxOccupancy`.
 
 ### 3.3 Permisos sin operación
-- `ficha.editar`: no hay endpoint de escritura de ficha clínica. → `preguntas-abiertas.md#p-22`.
+- `ficha.editar`: `POST /api/v1/patients/:id/records` (T3-2). → `preguntas-abiertas.md#p-22` (falta `PatientStatus`, D-03).
 - `seguridad.grabaciones` y `seguridad.boxes`: no hay endpoints de video; hoy solo gobiernan `logAudit` y la visibilidad en UI. → `#p-09`.
 
 ## 4. Reglas de autorización que no son permisos
