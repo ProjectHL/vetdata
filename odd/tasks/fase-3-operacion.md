@@ -11,7 +11,7 @@ Entrada: Fase 2 firmada (`docs/roadmap/cierre-fase-02.md`).
 ## Tareas
 
 - [x] T3-1 Agenda + boxes (checkIn, callFromWaiting, finalización compuesta, updateRoom lista blanca, concurrencia, historial ocupación)
-- [ ] T3-2 Ficha escritura append-only + PatientStatus en servidor
+- [x] T3-2 Ficha escritura append-only + PatientStatus en servidor
 - [ ] T3-3 Facturación atómica + kardex + 409 sin stock
 - [ ] T3-4 Descuento % por línea en servidor
 - [ ] T3-5 Farmacia: receta vigente, dispense atómico, OC, ajustes, movement_lot, recepción parcial
@@ -23,4 +23,4 @@ Entrada: Fase 2 firmada (`docs/roadmap/cierre-fase-02.md`).
 ## Progreso
 
 - 2026-10-09: T3-1 cerrada — backend ya implementaba el flujo; nuevo `TestAgendaBoxesConcurrencyAndWhitelist` PASS (2 llamadas concurrentes al mismo box → 1x200+1x409, box ocupado 409, finish compone cita Realizada + limpieza + libera ocupantes, lista blanca solo limpieza→disponible con 404 cross-tenant, historial ocupado→limpieza→disponible, check-in futuro 409) + suite completa verde. Excepción test-first: verificación de comportamiento preexistente, sin RED previo.
-- 2026-10-09: T3-2 parcial — `POST /api/v1/patients/:id/records` implementado + `TestClinicalRecordsAppendOnly` PASS (4 eventos, categoría Dermatológico calculada, 400/403/404/409, corrección vinculada sin mutar original, trigger anti-UPDATE verificado, grants Ficha escribe / Resumen no) + suite completa verde. RED: la ruta no existía (404 previo). Falta `PatientStatus` calculado — bloqueado en D-03 (decisión clínica del usuario).
+- 2026-10-09: T3-2 cerrada — `POST /api/v1/patients/:id/records` + `TestClinicalRecordsAppendOnly` PASS + `PatientStatus` calculado por política configurable `PATIENT_STATUS_RULES` (default provisional: solo vacuna vencida → Control; Urgente solo por config; D-03 sigue abierto para valores clínicos). Tests: `TestPatientStatusDefaults/CustomPolicy/InvalidPolicy` (domain) + `TestPatientStatusFromDefaultRules` (handler) + `TestPatientStatusRulesEnv` (config) + suite completa verde.

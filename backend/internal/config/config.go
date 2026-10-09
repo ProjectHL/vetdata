@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/url"
 	"os"
+
+	"github.com/vetdata/api/internal/domain"
 )
 
 // Config holds the runtime configuration of the API.
@@ -20,6 +22,7 @@ type Config struct {
 	SMTPPassword   string
 	OutboxKey      string
 	SMTPAllowPlain bool
+	StatusRules    string
 }
 
 // Load reads configuration from the environment.
@@ -35,6 +38,10 @@ func Load() (Config, error) {
 		SMTPPassword:   os.Getenv("SMTP_PASSWORD"),
 		OutboxKey:      os.Getenv("OUTBOX_KEY"),
 		SMTPAllowPlain: os.Getenv("SMTP_ALLOW_PLAIN") == "true" && os.Getenv("APP_ENV") != "production",
+		StatusRules:    os.Getenv("PATIENT_STATUS_RULES"),
+	}
+	if _, err := domain.ParsePatientStatusRules(cfg.StatusRules); err != nil {
+		return Config{}, err
 	}
 	if cfg.DatabaseURL == "" {
 		return Config{}, fmt.Errorf("DATABASE_URL is required")

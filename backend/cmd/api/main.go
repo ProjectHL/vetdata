@@ -67,7 +67,7 @@ func main() {
 			}
 		}
 	}()
-	mux := handler.NewWithOptions(pool, logger, handler.Options{Origin: cfg.Origin, SecureCookies: cfg.SecureCookies, Mail: mail})
+	mux := handler.NewWithOptions(pool, logger, handler.Options{Origin: cfg.Origin, SecureCookies: cfg.SecureCookies, Mail: mail, StatusRules: cfg.StatusRules})
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,

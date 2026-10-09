@@ -164,3 +164,40 @@ func TestClinicalRecordsAppendOnly(t *testing.T) {
 		t.Fatal("audit", audits, e)
 	}
 }
+
+func TestPatientStatusFromDefaultRules(t *testing.T) {
+	f, own, _, pid, _ := setupSharing(t)
+	today := time.Now().In(domain.Santiago).Format("2006-01-02")
+	yesterday := time.Now().In(domain.Santiago).AddDate(0, 0, -1).Format("2006-01-02")
+	tomorrow := time.Now().In(domain.Santiago).AddDate(0, 0, 1).Format("2006-01-02")
+
+	getStatus := func() (string, bool) {
+		t.Helper()
+		w := f.request("GET", "/api/v1/patients/"+pid, nil, own...)
+		if w.Code != 200 {
+			t.Fatal(w.Code, w.Body.String())
+		}
+		var p map[string]any
+		_ = json.Unmarshal(w.Body.Bytes(), &p)
+		status, _ := p["status"].(string)
+		pending, _ := p["statusPending"].(bool)
+		return status, pending
+	}
+	if status, pending := getStatus(); status != "Al día" || pending {
+		t.Fatal("default", status, pending)
+	}
+	code, _ := createRecord(t, f, own, pid, "vaccine", map[string]any{"name": "Antirrábica", "date": today, "nextDose": tomorrow}, nil)
+	if code != 201 {
+		t.Fatal(code)
+	}
+	if status, _ := getStatus(); status != "Al día" {
+		t.Fatal("future dose", status)
+	}
+	code, _ = createRecord(t, f, own, pid, "vaccine", map[string]any{"name": "KC", "date": today, "nextDose": yesterday}, nil)
+	if code != 201 {
+		t.Fatal(code)
+	}
+	if status, pending := getStatus(); status != "Control" || pending {
+		t.Fatal("overdue dose", status, pending)
+	}
+}

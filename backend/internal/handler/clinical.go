@@ -269,7 +269,7 @@ func (s *Server) patientJSON(ctx context.Context, tx pgx.Tx, a Actor, id string)
 	err = tx.QueryRow(ctx, `SELECT jsonb_build_object('id',p.id,'name',p.name,'species',p.species,'breed',p.breed,
  'sex',p.sex,'birthDate',p.birth_date,'color',p.color,'sterilized',p.sterilized,'weightKg',p.weight_kg,
  'chip',CASE WHEN $2 THEN p.chip ELSE '' END,'ownerRut',CASE WHEN $2 THEN o.rut ELSE '' END,
- 'clinic',c.name,'clinicId',p.origin_clinic_id,'status',NULL,'statusPending',true,
+ 'clinic',c.name,'clinicId',p.origin_clinic_id,
  'accessLevel',$3::text,'scope',$4::text,'allergies',p.allergies,'conditions',p.conditions)
  FROM patients p JOIN owners o ON o.id=p.owner_id JOIN clinics c ON c.id=p.origin_clinic_id WHERE p.id=$1`, id, full, v.Level, v.Scope).Scan(&raw)
 	if err != nil {
@@ -291,6 +291,7 @@ func (s *Server) patientJSON(ctx context.Context, tx pgx.Tx, a Actor, id string)
 		out["prescriptions"] = []any{}
 		out["corrections"] = []any{}
 	}
+	statusIn := domain.StatusInput{Today: domain.LocalDate(domain.Now(ctx))}
 	rows, err := tx.Query(ctx, `SELECT r.id,r.kind,r.payload,r.clinic_id,r.actor_id,r.corrects_id,r.created_at
  FROM clinical_records r WHERE patient_id=$1 AND ($2 OR kind='vaccine') ORDER BY created_at,id`, id, full)
 	if err != nil {
@@ -319,11 +320,32 @@ func (s *Server) patientJSON(ctx context.Context, tx pgx.Tx, a Actor, id string)
 		if key != "" {
 			out[key] = append(out[key].([]any), item)
 		}
+		switch kind {
+		case "consultation":
+			category, _ := item["category"].(string)
+			if category == "" {
+				if diagnosis, _ := item["diagnosis"].(string); diagnosis != "" {
+					category = diagnosisCategory(diagnosis)
+				}
+			}
+			statusIn.Consultations = append(statusIn.Consultations, domain.StatusConsultation{Category: category, Date: at.In(domain.Santiago).Format("2006-01-02")})
+		case "vaccine":
+			if next, _ := item["nextDose"].(string); next != "" {
+				statusIn.NextDoses = append(statusIn.NextDoses, next)
+			}
+		}
 	}
 	rows.Close()
 	if err = rows.Err(); err != nil {
 		return nil, err
 	}
+	for _, c := range out["conditions"].([]any) {
+		if s, ok := c.(string); ok {
+			statusIn.Conditions = append(statusIn.Conditions, s)
+		}
+	}
+	out["status"] = s.statusRule.Evaluate(statusIn)
+	out["statusPending"] = false
 	if v.Level == "compartido" {
 		if _, err = tx.Exec(ctx, "INSERT INTO shared_read_audit(patient_id,grant_id,owner_id,origin_clinic_id,reader_clinic_id,reader_user_id,scope) VALUES($1,$2,$3,$4,$5,$6,$7)", id, v.Grant, v.Owner, v.Origin, a.ClinicID, a.UserID, v.Scope); err != nil {
 			return nil, err

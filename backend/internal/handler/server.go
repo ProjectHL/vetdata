@@ -27,11 +27,15 @@ type Options struct {
 	SecureCookies bool
 	Mail          *notifications.Outbox
 	Now           func() time.Time
+	// StatusRules is the JSON PatientStatus policy (PATIENT_STATUS_RULES).
+	// Empty means the compiled default; invalid falls back to it with a warning.
+	StatusRules string
 }
 type Server struct {
-	pool *pgxpool.Pool
-	log  *slog.Logger
-	opt  Options
+	pool       *pgxpool.Pool
+	log        *slog.Logger
+	opt        Options
+	statusRule domain.StatusRules
 }
 type Actor struct{ SessionID, UserID, ClinicID, Role string }
 type apiError struct {
@@ -55,6 +59,12 @@ func NewWithOptions(pool *pgxpool.Pool, logger *slog.Logger, opt Options) http.H
 		opt.Now = time.Now
 	}
 	s := &Server{pool: pool, log: logger, opt: opt}
+	rules, err := domain.ParsePatientStatusRules(opt.StatusRules)
+	if err != nil {
+		logger.Warn("invalid status rules, using default", "error", err)
+		rules = domain.DefaultPatientStatusRules()
+	}
+	s.statusRule = rules
 	mux := http.NewServeMux()
 	s.route(mux, "GET /healthz", s.health)
 	s.route(mux, "GET /api/v1/health", func(w http.ResponseWriter, r *http.Request) error {

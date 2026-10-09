@@ -204,7 +204,7 @@ No existen: anulación, nota de crédito, pago parcial.
 
 | Enum | Valores | Fuente | Nota backend |
 |---|---|---|---|
-| `PatientStatus` | Al día, Control, Urgente | `domain/patients.ts` | Sin regla ni operación (`preguntas-abiertas.md#p-22`) |
+| `PatientStatus` | Al día, Control, Urgente | `domain/patients.ts` | Calculado en servidor por política configurable `PATIENT_STATUS_RULES` (JSON: `default` + `rules` con `diagnosisCategory`/`condition`/`overdueVaccine`/`recentConsultationDays`, primera coincidencia gana). Default provisional: solo vacuna vencida → Control; Urgente solo por config (D-03 abierto) |
 | `Species` | Perro, Gato, Ave, Conejo | `domain/patients.ts` | Catálogo; ampliable (exóticos) |
 | `Patient.sex` | Macho, Hembra | `domain/patients.ts` | |
 | `Owner.preferredContact` | WhatsApp, Teléfono, Email | `domain/owners.ts` | Canal de recordatorios |

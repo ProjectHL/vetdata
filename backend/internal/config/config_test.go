@@ -28,3 +28,21 @@ func TestProductionConfiguration(t *testing.T) {
 		t.Fatal(c.SecureCookies, c.SMTPAllowPlain, e)
 	}
 }
+
+func TestPatientStatusRulesEnv(t *testing.T) {
+	for _, key := range []string{"DATABASE_URL", "PATIENT_STATUS_RULES"} {
+		t.Setenv(key, "")
+	}
+	t.Setenv("DATABASE_URL", "postgresql://unused/unused")
+	if c, e := Load(); e != nil || c.StatusRules != "" {
+		t.Fatal(c, e)
+	}
+	t.Setenv("PATIENT_STATUS_RULES", `{"default":"Al día","rules":[{"status":"Urgente","any":[{"overdueVaccine":true}]}]}`)
+	if _, e := Load(); e != nil {
+		t.Fatal(e)
+	}
+	t.Setenv("PATIENT_STATUS_RULES", `{"default":"Grave","rules":[]}`)
+	if _, e := Load(); e == nil {
+		t.Fatal("invalid rules accepted")
+	}
+}
