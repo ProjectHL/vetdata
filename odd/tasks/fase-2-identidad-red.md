@@ -14,7 +14,7 @@ Usuarios/invitaciones/roles por clínica + regla de acceso owner-driven + solici
 - [x] T2-6 Freno emergencia `red.suspender` (solo origen Admin, motivo obligatorio, auditado, reversible)
 - [x] T2-7 Auditoría red (insert en lectura compartido, visible origen + dueño, retención 2-3 años)
 - [x] T2-8 Pendientes `GET /tasks` en servidor (fuentes disponibles, permisos filtran, `taskId` con `:`)
-- [ ] T2-9 Desactivar vet (409 + citas futuras, fix doctorId)
+- [x] T2-9 Desactivar vet (409 + citas futuras, fix doctorId)
 - [ ] T2-10 Salida fase (dos clínicas compartiendo ficha con vigencia real)
 
 ## Alcance autorizado
@@ -39,3 +39,4 @@ Rama de trabajo nueva desde `review/fase-1-validacion`. Solo `backend/` + `docs/
 - 2026-10-09: T2-6 cerrada — nuevo `TestEmergencySuspensionTransitionsAndNotifications` PASS (422 sin motivo, 404 receptora suspende/restaura, doble suspensión/restauración 409, suspender vencido `inactive_grant`, dueño notificado por correo) + suite completa verde. Solo Admin origen puede frenar; revocado o vencido no se suspende ni se revive.
 - 2026-10-09: T2-7 cerrada — nuevo `TestSharedReadAuditVisibleToOriginAndOwner` PASS (fila con clínica/usuario/alcance/hora, visible en `/sharing/audit` para Admin origen y en `/owner/sharing/audit` para el dueño vía email-link, 403 no-Admin, UPDATE/DELETE bloqueados por trigger) + suite completa verde. Retención por diseño: sin purga y trigger inmutable. `lastToken` ahora delega en `lastMarker` (los mails de login de dueño usan `#token=`).
 - 2026-10-09: T2-8 cerrada — nuevo `tasks.go`: `GET /api/v1/tasks?view=` (fuentes disponibles: `solicitud:` con Alta si vence en 24 h + `llegada:` de hoy con Alta si urgencia; filtro por permiso del rol; vistas all/open/mine/done; orden prioridad+antigüedad) y `PATCH /api/v1/tasks/:taskId` (`:` URL-encode, `assignee` validado en la clínica, meta fusionada, `task.updated` auditado); `TestTasksComputedFilteredAndMeta` PASS + suite completa verde. Fuentes de fases 3/4 (vacunas, facturas, recetas, stock, tienda, seguridad, soporte) quedan fuera por criterio de validación. Contrato en `agenda-y-acceso.md` + `api.md`. Aprendizaje: filtrar por permiso del rol del actor, no de cualquier rol de la clínica.
+- 2026-10-09: T2-9 cerrada — nuevo `TestVetLifecycleGeneratesDoctorIdAndBlocksDeactivation` PASS (invitar vet genera `doctorId` visible en `GET /users`, desactivar o cambiar rol con citas futuras 409 con lista, reasignar libera, desactivar 200) + suite completa verde. Aprendizaje: reasignar revalida contra grilla de slots (:00/:30) y horarios — en tests alinear la cita y dar `clinic_hours`/`doctor_hours` 24/7.

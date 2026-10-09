@@ -12,6 +12,66 @@ import (
 	"github.com/vetdata/api/internal/domain"
 )
 
+func TestVetLifecycleGeneratesDoctorIdAndBlocksDeactivation(t *testing.T) {
+	f, own, _, pid, _ := setupSharing(t)
+	ctx := context.Background()
+	w := f.request("POST", "/api/v1/users/invitations", map[string]string{"name": "Nueva Vet", "email": "newvet@example.test", "role": "Veterinario", "specialty": "General"}, own...)
+	if w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	raw := lastMarker(t, f, ctx, "#token=")
+	w = f.request("POST", "/api/v1/auth/accept-invitation", map[string]string{"token": raw, "password": "Test-password-123"}, own...)
+	if w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("GET", "/api/v1/users", nil, own...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var users []map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &users)
+	var vetID, doctorID string
+	for _, u := range users {
+		if u["email"] == "newvet@example.test" {
+			vetID, _ = u["id"].(string)
+			doctorID, _ = u["doctorId"].(string)
+		}
+	}
+	if vetID == "" || doctorID == "" {
+		t.Fatal("vet doctorId", vetID, doctorID)
+	}
+	aid := domain.UUID()
+	aligned := "(date_trunc('hour', now() AT TIME ZONE 'America/Santiago') + interval '2 hours') AT TIME ZONE 'America/Santiago'"
+	if _, e := f.pool.Exec(ctx, "INSERT INTO appointments(id,clinic_id,patient_id,doctor_id,starts_at,ends_at,reason,created_by) VALUES($1,$2,$3,$4,"+aligned+","+aligned+" + interval '30 minutes','Control',$5)", aid, f.clinic, pid, doctorID, f.user); e != nil {
+		t.Fatal(e)
+	}
+	w = f.request("PATCH", "/api/v1/users/"+vetID, map[string]string{"status": "Inactivo"}, own...)
+	if w.Code != 409 || !strings.Contains(w.Body.String(), aid) {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("PATCH", "/api/v1/users/"+vetID, map[string]string{"role": "Recepción"}, own...)
+	if w.Code != 409 {
+		t.Fatal("role change", w.Code, w.Body.String())
+	}
+	doc2 := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO doctors(id,clinic_id,name,specialty,initials) VALUES($1,$2,'Vet Dos','General','VD')", doc2, f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "INSERT INTO clinic_hours(clinic_id,weekday,starts_at,ends_at,slot_minutes) SELECT $1,g,'00:00','23:59',30 FROM generate_series(0,6) g", f.clinic); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "INSERT INTO doctor_hours(doctor_id,weekday,starts_at,ends_at) SELECT $1,g,'00:00','23:59' FROM generate_series(0,6) g", doc2); e != nil {
+		t.Fatal(e)
+	}
+	w = f.request("PATCH", "/api/v1/appointments/"+aid, map[string]string{"doctorId": doc2}, own...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("PATCH", "/api/v1/users/"+vetID, map[string]string{"status": "Inactivo"}, own...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}
 func TestDeactivateVetReturnsAppointments(t *testing.T) {
 	f, own, _, pid, _ := setupSharing(t)
 	ctx := context.Background()
