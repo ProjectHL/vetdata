@@ -83,22 +83,25 @@ Pantallas: `/tienda/productos`, `/tienda/venta` (POS), `/tienda/ventas`, `/tiend
 - `StockLevel` derivado.
 Ver [`../estados.md`](../estados.md).
 
-## Operaciones y endpoints sugeridos
+## Operaciones y endpoints
+
+> Estado T4-1: implementados `retail.checkout`, `retail.listSales`, `retail.transferToSala`, `retail.adjust` (retail), `retail.listShipments`, `retail.advanceShipment` + OC retail (`createOrder`/`sendOrder`/`receiveOrder` a central con recepción parcial). Migración `009_retail_sales.sql` (`retail_sales`, `retail_sale_lines`, `shipments`).
+
 | Operación (servicio) | Método y ruta | Entrada | Salida | Permiso | Errores | Auditoría / efectos |
 |---|---|---|---|---|---|---|
-| `retail.listProducts` | `GET /api/v1/retail/products` | `?category&species&stockLevel&q` | `Product[]` | sesión | 401 | — |
-| `retail.listSuppliers` | `GET /api/v1/retail/suppliers` | — | `RetailSupplier[]` | sesión | 401 | — |
-| `retail.listSales` | `GET /api/v1/retail/sales` | `?from&to&ownerRut&payment` | `Sale[]` | `tienda.vender` o `reportes.financiero` (propuesto) | 401, 403 | — |
-| `retail.checkout` | `POST /api/v1/retail/sales` | `{ items, ownerRut?, payment, delivery?: {courier} }` | `{ sale, shipment? }` | `tienda.vender` | 400 (RUT inválido, courier desconocido, despacho sin cliente), 409 (stock sala) | Atómico: boleta + kardex + despacho. Eventos `VentaRegistrada`, `DespachoCreado`, posible `StockBajo` |
-| `retail.listMovements` | `GET /api/v1/retail/movements` | `?productId&location&from&to` | `RetailMovement[]` | `tienda.inventario` (propuesto) | 401, 403 | — |
-| `retail.transferToSala` | `POST /api/v1/retail/transfers` | `{ productId, qty>0 }` | `RetailMovement` | `tienda.inventario` | 400, 404, 409 (central insuficiente) | Kardex |
-| `retail.adjust` | `POST /api/v1/retail/adjustments` | `{ productId, location, qty, reason }` | `RetailMovement` | `tienda.inventario` | 400, 409 | Kardex |
+| `retail.listProducts` | `GET /api/v1/retail/products` | — | `Product[]` con stock y lotes | `tienda.inventario` | 401, 403 | — |
+| `retail.listSuppliers` | `GET /api/v1/retail/suppliers` | — | `RetailSupplier[]` | `tienda.inventario` | 401, 403 | — |
+| `retail.listSales` ✅ | `GET /api/v1/retail/sales` | `?from&to&ownerRut&payment` | `Sale[]` con líneas | `tienda.vender` o `reportes.financiero` | 400 (RUT/fecha/medio), 403, 404 (dueño) | — |
+| `retail.checkout` ✅ | `POST /api/v1/retail/sales` | `{ items, ownerRut?, payment, delivery?: {courier, address?} }` (precios siempre desde catálogo) | `{ sale, shipment? }` | `tienda.vender` | 400 (RUT inválido, courier desconocido, despacho sin cliente), 404 (producto/dueño), 409 (stock sala/inactivo) | Atómico: boleta + folio + kardex `Venta` FEFO en sala + despacho opcional. Eventos `sale.created`, `shipment.created` |
+| `retail.listMovements` | `GET /api/v1/retail/movements` | — | movimientos de productos | `tienda.inventario` | 401, 403 | — |
+| `retail.transferToSala` ✅ | `POST /api/v1/retail/transfers` | `{ productId, qty>0 }` | `{ productId, qty, to: sala }` | `tienda.inventario` | 400, 404, 409 (central insuficiente) | Kardex `Transferencia` (salida central + entrada sala). Evento `inventory.transferred` |
+| `retail.adjust` ✅ | `POST /api/v1/retail/adjustments` | `{ lotId, qty≠0, reason: Merma\|Conteo }` | movimiento | `tienda.inventario` | 400 (Merma positiva, razón), 404, 409 (dejaría negativo) | Kardex. Evento `inventory.adjusted` |
 | `retail.listOrders` | `GET /api/v1/retail/orders` | `?status` | `RetailOrder[]` | `tienda.compras` (propuesto) | 401, 403 | — |
 | `retail.createOrder` | `POST /api/v1/retail/orders` | `{ supplierId, items, leadTimeDays }` | `RetailOrder` | `tienda.compras` | 400, 404 | — |
 | `retail.sendOrder` | `POST /api/v1/retail/orders/:id/send` | — | `RetailOrder` | `tienda.compras` | 404, 409 | Envío al proveedor no existe |
 | `retail.receiveOrder` | `POST /api/v1/retail/orders/:id/receive` | — | `RetailOrder` | `tienda.compras` | 404, 409 | Atómico con kardex. Evento `OCRecibida` |
-| `retail.listShipments` | `GET /api/v1/retail/shipments` | `?status&date` | `Shipment[]` | `tienda.inventario` (propuesto) | 401 | — |
-| `retail.advanceShipment` | `POST /api/v1/retail/shipments/:id/advance` | — | `Shipment` | `tienda.inventario` | 404, 409 (ya entregado) | Evento `DespachoAvanzado` (notificar al dueño) |
+| `retail.listShipments` ✅ | `GET /api/v1/retail/shipments` | `?status&date` | `Shipment[]` | `tienda.inventario` | 400, 403 | — |
+| `retail.advanceShipment` ✅ | `POST /api/v1/retail/shipments/:id/advance` | — | `Shipment` | `tienda.inventario` | 404, 409 (ya entregado) | `delivered_at` al entregar. Evento `shipment.advanced` |
 
 ## Efectos en otros dominios
 - Analítica: ventas, margen por categoría (`marginByCategory`), rotación (`productTurnover`), venta cruzada por especie (`crossSellBySpecies`), gasto por cliente (clínica + tienda), omnicanalidad.
