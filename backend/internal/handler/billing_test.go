@@ -18,6 +18,7 @@ type invoiceLineOut struct {
 	Kind     string `json:"kind"`
 	Qty      int    `json:"qty"`
 	PriceNet int64  `json:"priceNet"`
+	Discount int    `json:"discount"`
 	LineNet  int64  `json:"lineNet"`
 }
 
@@ -190,5 +191,55 @@ func TestInvoicesAtomicFolioStockAndRetry(t *testing.T) {
 	code, _ = emitInvoice(f, "", invoiceBody(oid, pid, lines...), other)
 	if code != 404 {
 		t.Fatal("tenant emit", code)
+	}
+}
+
+func TestInvoiceLineDiscounts(t *testing.T) {
+	f, own, _, _, oid := setupSharing(t)
+	supplier := responseID(t, f.request("POST", "/api/v1/pharmacy/suppliers", map[string]any{"name": "Proveedor", "rut": "12345678-5"}, own...), 201)
+	med := responseID(t, f.request("POST", "/api/v1/pharmacy/medications", itemInput{Name: "Amoxicilina", SupplierID: supplier, PriceNet: 10000, UnitCost: 3200}, own...), 201)
+	service := domain.UUID()
+	ctx := context.Background()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO catalog_items(id,clinic_id,kind,name,price_net) VALUES($1,$2,'service','Consulta',$3)", service, f.clinic, 5000); e != nil {
+		t.Fatal(e)
+	}
+	body := invoiceBody(oid, "", []map[string]any{{"itemId": med, "qty": 2, "discount": 10}, {"itemId": service, "qty": 1}}...)
+	// Stock inicial con su movimiento de compra para no romper el kardex.
+	lot := domain.UUID()
+	if _, e := f.pool.Exec(ctx, "INSERT INTO stock_lots(id,clinic_id,item_id,location,lot,qty,unit_cost) VALUES($1,$2,$3,'pharmacy','LOTE-D',10,3200)", lot, f.clinic, med); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := f.pool.Exec(ctx, "INSERT INTO inventory_movements(clinic_id,item_id,lot_id,qty,reason,actor_id) VALUES($1,$2,$3,10,'Compra',$4)", f.clinic, med, lot, f.user); e != nil {
+		t.Fatal(e)
+	}
+	code, inv := emitInvoice(f, "", body, own)
+	if code != 201 {
+		t.Fatal(code, inv)
+	}
+	if inv.Net != 23000 || inv.VAT != 4370 || inv.Total != 27370 {
+		t.Fatal("totals", inv)
+	}
+	if len(inv.Items) != 2 || inv.Items[0].Discount != 10 || inv.Items[0].LineNet != 18000 || inv.Items[1].Discount != 0 {
+		t.Fatal("lines", inv.Items)
+	}
+	// Descuento total deja la línea en cero.
+	code, free := emitInvoice(f, "", invoiceBody(oid, "", []map[string]any{{"itemId": service, "qty": 1, "discount": 100}}...), own)
+	if code != 201 || free.Net != 0 || free.Total != 0 {
+		t.Fatal("free line", code, free)
+	}
+	// Descuento inválido y totales manipulados fallan.
+	for _, bad := range []map[string]any{
+		{"itemId": service, "qty": 1, "discount": 101},
+		{"itemId": service, "qty": 1, "discount": -1},
+		{"itemId": service, "qty": 1, "priceNet": 1},
+	} {
+		code, _ = emitInvoice(f, "", map[string]any{"ownerId": oid, "lines": []map[string]any{bad}}, own)
+		if code != 400 {
+			t.Fatal("discount validation", bad, code)
+		}
+	}
+	code, _ = emitInvoice(f, "", map[string]any{"ownerId": oid, "lines": []map[string]any{{"itemId": service, "qty": 1}}, "net": 1}, own)
+	if code != 400 {
+		t.Fatal("manipulated total", code)
 	}
 }

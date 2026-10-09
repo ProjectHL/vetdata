@@ -103,7 +103,7 @@ Registrar usuario, clínica lectora, mascota, grant, alcance e instante antes de
 - **Factura (clínica)** — precios **netos**: `net = Σ qty·unitPrice`, `iva = round(net·0.19)`, `total = net + iva`. Fuente: `src/domain/invoices.ts:invoiceTotals`. Los precios de prestaciones son netos (`Service.price`, "precio neto en CLP"). *(regla)*
   - **Ambigüedad**: la factura también admite medicamentos con `unitPrice = Medication.price` ("Precio de venta unitario en CLP", `src/domain/medications.ts`), sin indicar si es neto o bruto. Hoy se trata como **neto** (se le suma IVA). → `preguntas-abiertas.md#p-17`.
 - **Boleta (tienda)** — precios **con IVA incluido**: `Product.price` "Precio de venta con IVA"; `total = Σ qty·unitPrice + deliveryFee`; IVA desglosado `ivaIncluded(gross) = round(gross − gross/1.19)`. Fuente: `src/domain/retail.ts:ivaIncluded`, `mock/retail.ts:checkout`. `Product.cost` es **neto**. Margen: `round(((price/1.19 − cost)/(price/1.19))·100)` (`retail.ts:margin`). *(regla)*
-- **DEBE**: el servidor **recalcula** todos los totales; nunca confía en `net/iva/total` ni `unitPrice` enviados por el cliente (hoy `NewInvoice` y `SaleItem` los traen del navegador). Precios desde catálogo; descuentos no existen (→ `preguntas-abiertas.md#p-16`).
+- **DEBE**: el servidor **recalcula** todos los totales; nunca confía en `net/iva/total` ni `unitPrice` enviados por el cliente (hoy `NewInvoice` y `SaleItem` los traen del navegador; campos desconocidos se rechazan con 400). Precios desde catálogo; descuento % por línea en servidor 0–100 (T3-4, `discount` por línea, redondeo por línea; listas por convenio después).
 - Redondeo: IVA de factura se redondea sobre el neto total (no por línea).
 
 ---

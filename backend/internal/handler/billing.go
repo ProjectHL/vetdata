@@ -20,8 +20,9 @@ func (s *Server) listInvoices(w http.ResponseWriter, r *http.Request) error {
 }
 
 type invoiceLineInput struct {
-	ItemID string `json:"itemId"`
-	Qty    int    `json:"qty"`
+	ItemID   string `json:"itemId"`
+	Qty      int    `json:"qty"`
+	Discount int    `json:"discount"`
 }
 
 type invoiceInput struct {
@@ -46,7 +47,7 @@ func (s *Server) createInvoice(w http.ResponseWriter, r *http.Request) error {
 		return fail(400, "invalid_invoice", "Paciente inválido")
 	}
 	for _, line := range in.Lines {
-		if !domain.ValidID(line.ItemID) || line.Qty < 1 || line.Qty > 1000000 {
+		if !domain.ValidID(line.ItemID) || line.Qty < 1 || line.Qty > 1000000 || line.Discount < 0 || line.Discount > 100 {
 			return fail(400, "invalid_invoice", "Línea inválida")
 		}
 	}
@@ -86,8 +87,12 @@ func (s *Server) createInvoice(w http.ResponseWriter, r *http.Request) error {
 			if !active {
 				return nil, fail(409, "inactive_item", "Ítem inactivo")
 			}
-			net += price * int64(line.Qty)
-			snapshot = append(snapshot, map[string]any{"itemId": line.ItemID, "kind": kind, "name": name, "qty": line.Qty, "priceNet": price, "lineNet": price * int64(line.Qty)})
+			lineNet, err := domain.DiscountedLine(price, int64(line.Qty), int64(line.Discount))
+			if err != nil {
+				return nil, fail(400, "invalid_invoice", "Línea inválida")
+			}
+			net += lineNet
+			snapshot = append(snapshot, map[string]any{"itemId": line.ItemID, "kind": kind, "name": name, "qty": line.Qty, "priceNet": price, "discount": line.Discount, "lineNet": lineNet})
 			if kind == "service" {
 				continue
 			}

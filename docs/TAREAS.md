@@ -47,7 +47,7 @@
 - [x] T3-1 Agenda + boxes: citas, `checkIn` (acceso+espera atómico), `callFromWaiting` (box+espera atómico), finalización compuesta (cita Realizada + room limpieza en una op), `clinic.updateRoom` con lista blanca + `agenda.gestionar`
 - [x] T3-2 Ficha escritura p-22: eventos append-only (crear mascota/dueño/consulta/vacuna/examen/receta, sin edit/delete; corrección con nuevo evento/anulación), diagnóstico texto+regla, `PatientStatus` calculado en servidor
 - [x] T3-3 Facturación: `invoices.create` atómica (folio + factura + kardex Venta por línea con `medicationId` + 409 si stock insuficiente), precios desde catálogo, folio único por clínica en transacción
-- [ ] T3-4 Precios p-16: descuento % por línea en servidor (listas por convenio después)
+- [x] T3-4 Precios p-16: descuento % por línea en servidor (listas por convenio después)
 - [ ] T3-5 Farmacia p-13+p-24: derivaciones con bandeja "recibidas" por definir, firma simple = usuario autenticado, verificar receta vigente al dispensar/facturar, `dispense` atómico, OC (crear/enviar/recibir) atómica, ajustes con movimiento, costo real proveedor, modelo `movement_lot` (lote único en MVP), recepción parcial en esta fase conforme a p-24
 - [ ] T3-6 Pagos p-11: registro manual (abonos parciales, medio, saldo dueño, `Pagada`), pasarela/arqueo después
 - [ ] T3-7 Notificaciones slice p-08: capa `notifications` abstracta + email transaccional, solo recordatorio citas, respetar `preferredContact` + opt-out
