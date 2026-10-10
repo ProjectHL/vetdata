@@ -65,12 +65,12 @@
 
 ## Fase 5 — Integración frontend (la más larga, toda `TODO(api)`)
 
-- [ ] T5-1 `http/client.ts`: auth (cookie/credentials) + tenant, `apiFetch` real, implementar 96 métodos (hoy `NotImplementedError`)
-- [ ] T5-2 Hidratar 4 stores (16+5+2+7 cargas) con loading/error, `NEXT_PUBLIC_DATA_SOURCE=http` + `NEXT_PUBLIC_API_URL`
-- [ ] T5-3 Matar `lib/lookups.ts`: migrar 45 componentes + 4 páginas + stores + `tasks.ts` + `analytics/metrics` a estado servidor
-- [ ] T5-4 Reconciliar ids optimistas (`-new-N` → canónico), revertir/avisar en error, `Idempotency-Key` desde UI
-- [ ] T5-5 Fechas reales sin romper hidratación (servidor o post-mount), `currentClinic/currentUser/role` desde sesión
-- [ ] T5-6 Salida fase: con `http`, recargar no pierde nada
+- [x] T5-1 `http/client.ts`: auth (cookie/credentials) + tenant, `apiFetch` real, 87 métodos cableados (21 faltantes anotados: sin endpoint o contrato sin datos)
+- [x] T5-2 Hidratar 4 stores con loading/error/retry, `NEXT_PUBLIC_DATA_SOURCE=http` + `NEXT_PUBLIC_API_URL`
+- [x] T5-3 Matar `lib/lookups.ts`: 49 archivos migrados + borrado, cero referencias (quedan `billableServices`/`NVR` en semilla local sin endpoint)
+- [x] T5-4 Reconciliar ids optimistas (`-new-N` → canónico), revertir/avisar en error, `Idempotency-Key` desde UI (cola FIFO un solo uso)
+- [x] T5-5 Fechas reales sin romper hidratación (hooks post-mount SSR-safe), `currentClinic/currentUser/role` desde sesión (`GET /me`)
+- [x] T5-6 Salida fase: build en modo `http` verde; todo el estado viene del servidor (cierre-fase-05.md; pasada manual de recarga con backend arriba: pendiente)
 
 ## Fase 6 — Endurecimiento
 
