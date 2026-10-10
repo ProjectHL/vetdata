@@ -6,7 +6,7 @@ import { DispenseQueue } from "@/components/pharmacy/dispense-queue";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { getSupplier, retailSuppliers } from "@/lib/lookups";
+import { useRetailSuppliers, useSuppliers } from "@/lib/server-state";
 import { formatCLP, formatDate } from "@/lib/format";
 import { expiringValue, pharmacyKpis } from "@/lib/metrics/pharmacy";
 import { retailKpis } from "@/lib/metrics/retail";
@@ -17,6 +17,9 @@ import { LinkTile, MyTasksCard } from "./shared";
 export function PharmacyDay() {
   const { medications, referrals, purchaseOrders, receivePurchaseOrder } = useStore();
   const { sales, products, orders, receiveOrder } = useRetail();
+  const suppliers = useSuppliers();
+  const retailSuppliers = useRetailSuppliers();
+  const getSupplier = (id: string) => suppliers.find((s) => s.id === id);
   const kpis = pharmacyKpis(medications, referrals);
   const expiring = expiringValue(medications);
   const retail = retailKpis(sales, products);

@@ -32,10 +32,7 @@ import { ownerName } from "@/domain/owners";
 import { NOW_TIME, TODAY, addDays, formatDate, formatRut, minutesSince } from "@/lib/format";
 import { type AppointmentStage, appointmentStage, stageStyle } from "@/lib/metrics/day";
 import { useSecurity } from "@/lib/security-store";
-import { read } from "@/lib/server-state";
-import { doctors as mockDoctors } from "@/mocks/clinic";
-import { owners as mockOwners } from "@/mocks/owners";
-import { patients as mockPatients } from "@/mocks/patients";
+import { useDoctorsAll, useOwners, usePatients } from "@/lib/server-state";
 import { useCan, useCanView, useDoctors, useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
@@ -142,7 +139,7 @@ function DayView({
   const doctors = useDoctors();
   const can = useCan();
   const stage = useStage();
-  const patients = read("patients", mockPatients);
+  const patients = usePatients();
   const dayAppts = appointments.filter((a) => a.date === date);
   const nowOffset = (minutesSince("09:00", NOW_TIME) / 30) * ROW;
   const showNow = date === TODAY && nowOffset >= 0 && nowOffset <= SLOTS.length * ROW;
@@ -238,8 +235,8 @@ function WeekView({
 }) {
   const { appointments } = useStore();
   const stage = useStage();
-  const patients = read("patients", mockPatients);
-  const allDoctors = read("doctors", mockDoctors);
+  const patients = usePatients();
+  const allDoctors = useDoctorsAll();
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
 
   return (
@@ -283,9 +280,9 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
   const { waiting, checkIn, callFromWaiting } = useSecurity();
   const doctors = useDoctors();
   const stage = useStage();
-  const patients = read("patients", mockPatients);
-  const owners = read("owners", mockOwners);
-  const allDoctors = read("doctors", mockDoctors);
+  const patients = usePatients();
+  const owners = useOwners();
+  const allDoctors = useDoctorsAll();
   const [resched, setResched] = useState<{ date: string; time: string; doctorId: string } | null>(null);
   const [box, setBox] = useState("");
 
@@ -429,9 +426,9 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
 function NewAppointmentDialog({ slot, onClose }: { slot: { doctorId: string; date: string; time: string } | null; onClose: () => void }) {
   const { addAppointment, rooms } = useStore();
   const canView = useCanView();
-  const patients = read("patients", mockPatients);
-  const owners = read("owners", mockOwners);
-  const allDoctors = read("doctors", mockDoctors);
+  const patients = usePatients();
+  const owners = useOwners();
+  const allDoctors = useDoctorsAll();
   const boxes = rooms.filter((r) => r.kind === "box");
   const [patientId, setPatientId] = useState("");
   const [reason, setReason] = useState("");

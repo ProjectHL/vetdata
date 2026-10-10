@@ -17,8 +17,7 @@ import {
 import { type Medication, stockStatus } from "@/domain/medications";
 import { COST_RATIO, type PurchaseOrderStatus } from "@/domain/pharmacy";
 import { formatCLP, formatDate } from "@/lib/format";
-import { read } from "@/lib/server-state";
-import { suppliers as mockSuppliers } from "@/mocks/pharmacy";
+import { useSuppliers } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 
 /** Cantidad sugerida: reponer hasta el doble del mínimo. */
@@ -34,7 +33,7 @@ const statusVariant: Record<PurchaseOrderStatus, "default" | "secondary" | "outl
 
 export function RestockSuggestions() {
   const { medications, purchaseOrders, createPurchaseOrder } = useStore();
-  const suppliers = read("suppliers", mockSuppliers);
+  const suppliers = useSuppliers();
   const [notice, setNotice] = useState("");
 
   // Medicamentos ya pedidos en una OC abierta no se vuelven a sugerir.
@@ -105,7 +104,7 @@ export function RestockSuggestions() {
 
 export function PurchaseOrders() {
   const { purchaseOrders, medications, sendPurchaseOrder, receivePurchaseOrder } = useStore();
-  const suppliers = read("suppliers", mockSuppliers);
+  const suppliers = useSuppliers();
   const rows = [...purchaseOrders].sort((a, b) => b.number - a.number);
 
   return (
@@ -172,7 +171,7 @@ export function PurchaseOrders() {
 
 export function SupplierDirectory() {
   const { purchaseOrders } = useStore();
-  const suppliers = read("suppliers", mockSuppliers);
+  const suppliers = useSuppliers();
   return (
     <div className="flex flex-col gap-3">
       <h2 className="text-lg font-semibold tracking-tight">Proveedores ({suppliers.length})</h2>

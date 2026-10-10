@@ -17,8 +17,7 @@ import { type Medication, stockStatus } from "@/domain/medications";
 import type { Patient } from "@/domain/patients";
 import { INTERNAL_PHARMACY, type Referral, type ReferralItem } from "@/domain/referrals";
 import { TODAY } from "@/lib/format";
-import { read, readScalar } from "@/lib/server-state";
-import { clinics as mockClinics, currentClinic as mockCurrentClinic } from "@/mocks/network";
+import { useClinics, useCurrentClinic } from "@/lib/server-state";
 import { useDoctors, useStore } from "@/lib/store";
 import { Field, SuccessPanel } from "./field";
 
@@ -44,8 +43,8 @@ let rowKey = 0;
 export function ReferralForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
   const { addReferral, medications, currentUser } = useStore();
   const doctors = useDoctors();
-  const clinics = read("clinics", mockClinics);
-  const currentClinic = readScalar("currentClinic", mockCurrentClinic);
+  const clinics = useClinics();
+  const currentClinic = useCurrentClinic();
   const destinations = [INTERNAL_PHARMACY, ...clinics.filter((c) => c !== currentClinic)];
   const [destination, setDestination] = useState(INTERNAL_PHARMACY);
   const [doctorId, setDoctorId] = useState(currentUser.doctorId ?? doctors[0]?.id ?? "");

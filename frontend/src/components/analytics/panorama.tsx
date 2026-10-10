@@ -27,7 +27,7 @@ import {
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import { visiblePatients } from "@/lib/analytics";
-import { currentClinic, revenueByLine } from "@/lib/lookups";
+import { useCurrentClinic, useRevenueByLine as useRevenueByLineLive } from "@/lib/server-state";
 import { SERVICES_MARGIN } from "@/domain/metrics";
 import { COST_RATIO } from "@/domain/pharmacy";
 import { grantStatus } from "@/domain/sharing";
@@ -55,7 +55,8 @@ const millions = (n: number) => `$${(n / 1_000_000).toLocaleString("es-CL", { ma
 /** Serie de ingresos con el mes en curso de la tienda calculado desde las boletas. */
 function useRevenueByLine() {
   const { sales } = useRetail();
-  const series = revenueByLine.map((m) => ({ ...m }));
+  const base = useRevenueByLineLive();
+  const series = base.map((m) => ({ ...m }));
   series[series.length - 1].tienda = retailMonthNet(sales);
   return series;
 }
@@ -65,6 +66,7 @@ export function Panorama() {
   const { sales, products, shipments } = useRetail();
   const { tickets } = useSupport();
   const security = useSecurity();
+  const currentClinic = useCurrentClinic();
   const camsOnline = security.cameras.filter((c) => c.status === "En línea").length;
   const openEvents = security.events.filter((e) => OPEN_EVENT.includes(e.status));
   const criticalNew = openEvents.filter((e) => e.severity === "Crítica" && e.status === "Nuevo").length;

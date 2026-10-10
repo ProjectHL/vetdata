@@ -27,9 +27,7 @@ import type { Patient } from "@/domain/patients";
 import { IVA_RATE } from "@/domain/services";
 import { TODAY, formatCLP, formatDate, formatRut } from "@/lib/format";
 import { useStore } from "@/lib/store";
-import { read } from "@/lib/server-state";
-import { owners as mockOwners } from "@/mocks/owners";
-import { services } from "@/mocks/services";
+import { useBillableServices, useOwners } from "@/lib/server-state";
 import { SuccessPanel } from "./field";
 
 type Row = InvoiceItem & { key: number };
@@ -44,10 +42,11 @@ function totals(items: InvoiceItem[]) {
 
 export function InvoiceForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
   const { addInvoice, medications } = useStore();
-  const owners = read("owners", mockOwners);
+  const owners = useOwners();
+  const billableServices = useBillableServices();
   const owner = owners.find((o) => o.rut === patient.ownerRut)!;
   const [rows, setRows] = useState<Row[]>([
-    { key: ++rowKey, description: services[0].name, qty: 1, unitPrice: services[0].price },
+    { key: ++rowKey, description: billableServices[0].name, qty: 1, unitPrice: billableServices[0].price },
   ]);
   const [picker, setPicker] = useState("");
   const [created, setCreated] = useState<Invoice | null>(null);
@@ -56,7 +55,7 @@ export function InvoiceForm({ patient, onDone }: { patient: Patient; onDone: () 
     const [kind, id] = value.split(":");
     const source =
       kind === "s"
-        ? services.find((s) => s.id === id)
+        ? billableServices.find((s) => s.id === id)
         : medications.find((m) => m.id === id);
     if (!source) return;
     setRows((prev) => [
@@ -151,7 +150,7 @@ export function InvoiceForm({ patient, onDone }: { patient: Patient; onDone: () 
         <SelectContent>
           <SelectGroup>
             <SelectLabel>Prestaciones</SelectLabel>
-            {services.map((s) => (
+            {billableServices.map((s) => (
               <SelectItem key={s.id} value={`s:${s.id}`}>{s.name} · {formatCLP(s.price)}</SelectItem>
             ))}
           </SelectGroup>
@@ -205,7 +204,7 @@ function Totals({ net, iva, total }: { net: number; iva: number; total: number }
 }
 
 export function InvoicePreview({ invoice, patient }: { invoice: Invoice; patient: Patient }) {
-  const owners = read("owners", mockOwners);
+  const owners = useOwners();
   const owner = owners.find((o) => o.rut === invoice.ownerRut)!;
   const { clinicProfile } = useStore();
   return (

@@ -31,8 +31,7 @@ import {
 import { CATEGORIES, LOCATIONS, type Product, margin, stockLevel, totalStock } from "@/domain/retail";
 import { formatCLP, formatDate } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
-import { read } from "@/lib/server-state";
-import { retailSuppliers as mockRetailSuppliers } from "@/mocks/retail";
+import { useRetailSuppliers } from "@/lib/server-state";
 import { cn } from "@/lib/utils";
 import { ProductThumb, StockLevelBadge } from "./shared";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -42,7 +41,7 @@ const SPECIES = ["Perro", "Gato", "Ave", "Conejo", "Todas"];
 
 export function Catalog() {
   const { products, sales } = useRetail();
-  const retailSuppliers = read("retailSuppliers", mockRetailSuppliers);
+  const retailSuppliers = useRetailSuppliers();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState("all");
   const [species, setSpecies] = useState("all");

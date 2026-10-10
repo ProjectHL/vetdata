@@ -25,9 +25,7 @@ import {
 import { ownerName } from "@/domain/owners";
 import { type Patient, lastVisit, patientAge } from "@/domain/patients";
 import { TODAY, formatDate, formatRut } from "@/lib/format";
-import { read } from "@/lib/server-state";
-import { doctors as mockDoctors } from "@/mocks/clinic";
-import { owners as mockOwners } from "@/mocks/owners";
+import { useDoctorsAll, useOwners } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { Guard } from "@/components/settings/guard";
 import { InvoiceForm } from "./invoice-form";
@@ -87,8 +85,8 @@ function QuickViewBody({
   onClose: () => void;
 }) {
   const [view, setView] = useState<CareView>(initialView);
-  const owners = read("owners", mockOwners);
-  const doctors = read("doctors", mockDoctors);
+  const owners = useOwners();
+  const doctors = useDoctorsAll();
   const owner = owners.find((o) => o.rut === patient.ownerRut)!;
   const next = useNextAppointment(patient.id);
   // Si se abrió directo en una acción, "Listo" cierra el modal.

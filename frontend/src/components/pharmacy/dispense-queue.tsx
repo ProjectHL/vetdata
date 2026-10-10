@@ -9,17 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { INTERNAL_PHARMACY } from "@/domain/referrals";
 import { formatDate } from "@/lib/format";
-import { read } from "@/lib/server-state";
-import { doctors as mockDoctors } from "@/mocks/clinic";
-import { patients as mockPatients } from "@/mocks/patients";
+import { useDoctorsAll, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { EmptyState } from "@/components/layout/empty-state";
 
 /** Derivaciones a farmacia interna pendientes de entrega. */
 export function DispenseQueue() {
   const { referrals, medications, dispenseReferral } = useStore();
-  const doctors = read("doctors", mockDoctors);
-  const patients = read("patients", mockPatients);
+  const doctors = useDoctorsAll();
+  const patients = usePatients();
   const queue = referrals
     .filter((r) => r.destination === INTERNAL_PHARMACY && r.status !== "Dispensada")
     .sort((a, b) => a.date.localeCompare(b.date));

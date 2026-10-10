@@ -22,7 +22,13 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { boxOccupancy, currentClinic, monthlyRevenue, owners, patients } from "@/lib/lookups";
+import {
+  useBoxOccupancy,
+  useCurrentClinic,
+  useMonthlyRevenue,
+  useOwners,
+  usePatients,
+} from "@/lib/server-state";
 import { COST_RATIO } from "@/domain/pharmacy";
 import { grantStatus } from "@/domain/sharing";
 import { formatCLP, formatDate } from "@/lib/format";
@@ -62,6 +68,8 @@ export function Reports() {
 
 function Financial() {
   const { invoices } = useStore();
+  const monthlyRevenue = useMonthlyRevenue();
+  const owners = useOwners();
   const billed = invoices.reduce((s, i) => s + i.total, 0);
   const unpaidInvoices = invoices.filter((i) => i.status === "Emitida").reduce((s, i) => s + i.total, 0);
   const ownerBalance = owners.reduce((s, o) => s + o.balance, 0);
@@ -140,6 +148,9 @@ function Financial() {
 
 function Operations() {
   const { appointments } = useStore();
+  const patients = usePatients();
+  const currentClinic = useCurrentClinic();
+  const boxOccupancy = useBoxOccupancy();
   const byDoctor = Object.entries(
     patients
       .filter((p) => p.clinic === currentClinic)
@@ -384,6 +395,7 @@ function PharmacyReport() {
 
 function NetworkReport() {
   const { requests, grants } = useStore();
+  const currentClinic = useCurrentClinic();
   const sent = requests.filter((r) => r.from === currentClinic);
   const received = requests.filter((r) => r.to === currentClinic);
   const answered = received.filter((r) => r.respondedAt);

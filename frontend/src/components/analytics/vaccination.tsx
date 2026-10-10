@@ -26,7 +26,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { coverage, dueVaccines, ownerOf, visiblePatients } from "@/lib/analytics";
-import { coverageByVaccine, currentClinic, patients, vaccineCoverage } from "@/lib/lookups";
+import {
+  useCoverageByVaccine,
+  useCurrentClinic,
+  usePatients,
+  useVaccineCoverage,
+} from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { type Patient } from "@/domain/patients";
 import { formatDate } from "@/lib/format";
@@ -36,6 +41,10 @@ import { EmptyState } from "@/components/layout/empty-state";
 
 export function Vaccination() {
   const { grants, reminders, sendReminder } = useStore();
+  const currentClinic = useCurrentClinic();
+  const patients = usePatients();
+  const vaccineCoverage = useVaccineCoverage();
+  const coverageByVaccine = useCoverageByVaccine();
   const [scheduling, setScheduling] = useState<Patient | null>(null);
   const mine = visiblePatients(grants, currentClinic);
   const due = dueVaccines(mine);

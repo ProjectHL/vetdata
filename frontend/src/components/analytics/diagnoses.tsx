@@ -31,7 +31,12 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { patientsWithCategory, visiblePatients } from "@/lib/analytics";
-import { currentClinic, diagnosisCategories, monthlyConsults, networkAlerts } from "@/lib/lookups";
+import {
+  useCurrentClinic,
+  useDiagnosisCategories,
+  useMonthlyConsults,
+  useNetworkAlerts,
+} from "@/lib/server-state";
 import { formatDate } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -43,6 +48,10 @@ const casesConfig = { clinica: { label: "Casos", color: "var(--viz-1)" } } satis
 
 export function Diagnoses() {
   const { grants } = useStore();
+  const currentClinic = useCurrentClinic();
+  const diagnosisCategories = useDiagnosisCategories();
+  const monthlyConsults = useMonthlyConsults();
+  const networkAlerts = useNetworkAlerts();
   const [period, setPeriod] = useState<keyof typeof PERIODS>("12");
   const [category, setCategory] = useState(diagnosisCategories[0].category);
   const trend = monthlyConsults.slice(-Number(period));

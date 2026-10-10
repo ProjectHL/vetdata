@@ -20,9 +20,7 @@ import {
 import type { AppointmentStatus } from "@/domain/appointments";
 import type { Invoice } from "@/domain/invoices";
 import { TODAY, formatCLP, formatDate } from "@/lib/format";
-import { read } from "@/lib/server-state";
-import { doctors as mockDoctors } from "@/mocks/clinic";
-import { patients as mockPatients } from "@/mocks/patients";
+import { useDoctorsAll, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { InvoicePreview } from "./invoice-form";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -44,8 +42,8 @@ type Props = { patientIds: string[]; showPatient?: boolean };
 
 export function AppointmentsTable({ patientIds, showPatient }: Props) {
   const { appointments, rooms } = useStore();
-  const patients = read("patients", mockPatients);
-  const doctors = read("doctors", mockDoctors);
+  const patients = usePatients();
+  const doctors = useDoctorsAll();
   const rows = appointments
     .filter((a) => patientIds.includes(a.patientId))
     .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
@@ -80,7 +78,7 @@ export function AppointmentsTable({ patientIds, showPatient }: Props) {
 
 export function InvoicesTable({ patientIds, showPatient }: Props) {
   const { invoices } = useStore();
-  const patients = read("patients", mockPatients);
+  const patients = usePatients();
   const [open, setOpen] = useState<Invoice | null>(null);
   const rows = invoices
     .filter((i) => patientIds.includes(i.patientId))
@@ -135,8 +133,8 @@ export function InvoicesTable({ patientIds, showPatient }: Props) {
 
 export function ReferralsTable({ patientIds, showPatient }: Props) {
   const { referrals, medications } = useStore();
-  const patients = read("patients", mockPatients);
-  const doctors = read("doctors", mockDoctors);
+  const patients = usePatients();
+  const doctors = useDoctorsAll();
   const rows = referrals
     .filter((r) => patientIds.includes(r.patientId))
     .sort((a, b) => b.date.localeCompare(a.date));

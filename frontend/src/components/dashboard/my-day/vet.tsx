@@ -6,7 +6,7 @@ import { SpeciesIcon } from "@/components/patients/species-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { currentClinic, getOwner, getPatient, rooms as roomCatalog } from "@/lib/lookups";
+import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { INTERNAL_PHARMACY } from "@/domain/referrals";
 import { NOW_TIME, minutesSince } from "@/lib/format";
@@ -19,6 +19,11 @@ import { LinkTile, MyTasksCard } from "./shared";
 export function VetDay() {
   const { currentUser, appointments, rooms, referrals, requests, updateRoom, updateAppointment } = useStore();
   const { waiting, callFromWaiting } = useSecurity();
+  const currentClinic = useCurrentClinic();
+  const patients = usePatients();
+  const owners = useOwners();
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
   const can = useCan();
   const myId = currentUser.doctorId;
   const mine = todayAppointments(appointments).filter((a) => a.doctorId === myId && a.status !== "Cancelada");
@@ -92,7 +97,7 @@ export function VetDay() {
                 <>
                   <p>
                     <Link href={`/pacientes/historial/${current.id}`} className="font-semibold hover:text-primary hover:underline">{current.name}</Link>
-                    <span className="text-muted-foreground"> en {roomCatalog.find((r) => r.id === myRoom.id)?.name} desde las {myRoom.since} ({minutesSince(myRoom.since ?? NOW_TIME)} min)</span>
+                    <span className="text-muted-foreground"> en {rooms.find((r) => r.id === myRoom.id)?.name} desde las {myRoom.since} ({minutesSince(myRoom.since ?? NOW_TIME)} min)</span>
                   </p>
                   {current.allergies.length > 0 && <p className="text-xs text-destructive">Alergias: {current.allergies.join(", ")}</p>}
                   <Button

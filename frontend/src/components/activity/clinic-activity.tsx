@@ -22,8 +22,8 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet";
-import { doctors, getOwner, getPatient, patients } from "@/lib/lookups";
-import { type Room, type RoomStatus } from "@/domain/clinic";
+import { useDoctorsAll, useOwners, usePatients } from "@/lib/server-state";
+import { type Doctor, type Room, type RoomStatus } from "@/domain/clinic";
 import { ownerName } from "@/domain/owners";
 import { NOW_TIME, minutesSince } from "@/lib/format";
 import { useCanView, useDoctors, useStore } from "@/lib/store";
@@ -32,7 +32,7 @@ import { kindIcon, statusMeta } from "./room-status";
 
 const STATUSES: RoomStatus[] = ["ocupado", "limpieza", "disponible"];
 
-function doctorById(id?: string) {
+function doctorById(doctors: Doctor[], id?: string) {
   return doctors.find((d) => d.id === id);
 }
 
@@ -49,6 +49,8 @@ export function ClinicActivity() {
 
   const clinicalRooms = rooms.filter((r) => r.kind !== "comun");
   const activeDoctors = useDoctors();
+  const patients = usePatients();
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
   const selected = rooms.find((r) => r.id === selectedId);
 
 
@@ -177,8 +179,10 @@ function RoomTile({ room, dimmed, onClick }: { room: Room; dimmed: boolean; onCl
   const KindIcon = kindIcon[room.kind];
   const common = room.kind === "comun";
   const meta = statusMeta[room.status];
-  const doctor = doctorById(room.doctorId);
-  const patient = getPatient(room.patientId ?? "");
+  const doctorsAll = useDoctorsAll();
+  const patients = usePatients();
+  const doctor = doctorById(doctorsAll, room.doctorId);
+  const patient = patients.find((p) => p.id === (room.patientId ?? ""));
 
   return (
     <button
@@ -244,10 +248,15 @@ function RoomSheet({
   const [patientId, setPatientId] = useState("");
   const canView = useCanView();
   const activeDoctors = useDoctors();
+  const doctorsAll = useDoctorsAll();
+  const patients = usePatients();
+  const owners = useOwners();
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
 
   const busyDoctors = new Set(rooms.filter((r) => r.status === "ocupado").map((r) => r.doctorId));
   const busyPatients = new Set(rooms.filter((r) => r.status === "ocupado").map((r) => r.patientId));
-  const doctor = doctorById(room?.doctorId);
+  const doctor = doctorById(doctorsAll, room?.doctorId);
   const patient = getPatient(room?.patientId ?? "");
   const meta = room ? statusMeta[room.status] : null;
 

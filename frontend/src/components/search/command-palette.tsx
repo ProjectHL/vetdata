@@ -28,7 +28,7 @@ import {
   CommandList,
   CommandShortcut,
 } from "@/components/ui/command";
-import { getOwner, getPatient, owners, patients, petsOf } from "@/lib/lookups";
+import { useOwners, usePatients } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { formatRut, normalizeRut } from "@/lib/format";
 import { todayAppointments } from "@/lib/metrics/day";
@@ -62,6 +62,11 @@ export function CommandPalette({ open, onOpenChange }: { open: boolean; onOpenCh
   const { appointments, medications, invoices } = useStore();
   const { products, sales } = useRetail();
   const { tickets } = useSupport();
+  const owners = useOwners();
+  const patients = usePatients();
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
+  const petsOf = (ownerRut: string) => patients.filter((p) => p.ownerRut === ownerRut);
   const [query, setQuery] = useState("");
 
   const q = query.trim().toLowerCase();

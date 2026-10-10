@@ -13,7 +13,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { visiblePatients } from "@/lib/analytics";
-import { currentClinic, getOwner, getPatient } from "@/lib/lookups";
+import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { lastVisit } from "@/domain/patients";
 import { formatCLP, formatDate } from "@/lib/format";
@@ -27,6 +27,11 @@ import { AdminAlerts } from "./shared";
 export function AdminDay() {
   const { grants, requests } = useStore();
   const { sales, products } = useRetail();
+  const currentClinic = useCurrentClinic();
+  const patients = usePatients();
+  const owners = useOwners();
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
   const visible = visiblePatients(grants, currentClinic);
   const own = visible.filter((p) => p.clinic === currentClinic).length;
   const consults = consultsThisMonth();

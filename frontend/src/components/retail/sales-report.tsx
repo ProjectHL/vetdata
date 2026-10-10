@@ -29,15 +29,14 @@ import { ownerName } from "@/domain/owners";
 import { CATEGORIES, PAYMENT_METHODS, type Sale } from "@/domain/retail";
 import { TODAY, formatCLP, formatDate } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
-import { read } from "@/lib/server-state";
-import { owners as mockOwners } from "@/mocks/owners";
+import { useOwners } from "@/lib/server-state";
 import { Receipt } from "./receipt";
 
 const salesConfig = { value: { label: "Ventas", color: "var(--viz-1)" } } satisfies ChartConfig;
 
 export function SalesReport() {
   const { sales, products } = useRetail();
-  const owners = read("owners", mockOwners);
+  const owners = useOwners();
   const [channel, setChannel] = useState("all");
   const [payment, setPayment] = useState("all");
   const [open, setOpen] = useState<Sale | null>(null);

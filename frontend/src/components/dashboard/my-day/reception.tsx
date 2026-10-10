@@ -6,7 +6,7 @@ import { SpeciesIcon } from "@/components/patients/species-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { doctors, getOwner, getPatient } from "@/lib/lookups";
+import { useDoctorsAll, useOwners, usePatients } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { WAITING_CAPACITY } from "@/domain/security";
 import { formatCLP, minutesSince } from "@/lib/format";
@@ -17,12 +17,19 @@ import { useSecurity } from "@/lib/security-store";
 import { useStore } from "@/lib/store";
 import { LinkTile, MyTasksCard } from "./shared";
 
-const doctorName = (id: string) => doctors.find((d) => d.id === id)?.name ?? "";
+import { type Doctor } from "@/domain/clinic";
+
+const doctorName = (doctors: Doctor[], id: string) => doctors.find((d) => d.id === id)?.name ?? "";
 
 export function ReceptionDay() {
   const { appointments, rooms, invoices } = useStore();
   const { access, waiting, checkIn } = useSecurity();
   const { sales, products, shipments } = useRetail();
+  const doctors = useDoctorsAll();
+  const patients = usePatients();
+  const owners = useOwners();
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
   const today = todayAppointments(appointments).filter((a) => a.status !== "Cancelada");
   const expected = expectedArrivals(appointments, access, waiting, rooms);
   const people = waiting.reduce((s, w) => s + w.people, 0);
@@ -63,7 +70,7 @@ export function ReceptionDay() {
                   <SpeciesIcon species={p.species} className="size-4 text-primary" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{a.time} · {p.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{ownerName(getOwner(p.ownerRut)!)} · {doctorName(a.doctorId)}</p>
+                    <p className="truncate text-xs text-muted-foreground">{ownerName(getOwner(p.ownerRut)!)} · {doctorName(doctors, a.doctorId)}</p>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => checkIn(a.id)}>Llegó</Button>
                 </div>
@@ -90,7 +97,7 @@ export function ReceptionDay() {
                   <SpeciesIcon species={p.species} className="size-4 text-primary" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{p.name} <span className="font-normal text-muted-foreground">· cita {appt.time}</span></p>
-                    <p className="truncate text-xs text-muted-foreground">{doctorName(appt.doctorId)}</p>
+                    <p className="truncate text-xs text-muted-foreground">{doctorName(doctors, appt.doctorId)}</p>
                   </div>
                   <Badge variant={min > 20 ? "destructive" : "secondary"} className="tabular-nums"><Clock /> {min} min</Badge>
                 </div>

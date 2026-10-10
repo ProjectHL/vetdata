@@ -30,9 +30,7 @@ import { type Owner, ownerName } from "@/domain/owners";
 import { CATEGORIES, COURIERS, PAYMENT_METHODS, type PaymentMethod, type Product, type Sale, deliveryFee, ivaIncluded } from "@/domain/retail";
 import { formatCLP, formatRut, normalizeRut } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
-import { read } from "@/lib/server-state";
-import { owners as mockOwners } from "@/mocks/owners";
-import { patients as mockPatients } from "@/mocks/patients";
+import { useOwners, usePatients } from "@/lib/server-state";
 import { cn } from "@/lib/utils";
 import { Receipt } from "./receipt";
 import { ProductThumb } from "./shared";
@@ -41,8 +39,8 @@ type Line = { productId: string; qty: number };
 
 export function PointOfSale() {
   const { products, checkout } = useRetail();
-  const owners = read("owners", mockOwners);
-  const patients = read("patients", mockPatients);
+  const owners = useOwners();
+  const patients = usePatients();
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<string>("all");
   const [cart, setCart] = useState<Line[]>([]);

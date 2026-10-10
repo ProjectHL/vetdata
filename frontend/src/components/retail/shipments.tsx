@@ -19,8 +19,7 @@ import { ownerName } from "@/domain/owners";
 import { SHIPMENT_FLOW, type ShipmentStatus } from "@/domain/retail";
 import { formatCLP, formatDate } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
-import { read } from "@/lib/server-state";
-import { owners as mockOwners } from "@/mocks/owners";
+import { useOwners } from "@/lib/server-state";
 
 const statusIcon: Record<ShipmentStatus, React.ComponentType<{ className?: string }>> = {
   "Por preparar": Package,
@@ -31,7 +30,7 @@ const statusIcon: Record<ShipmentStatus, React.ComponentType<{ className?: strin
 
 export function Shipments() {
   const { shipments, sales, advanceShipment } = useRetail();
-  const owners = read("owners", mockOwners);
+  const owners = useOwners();
   const [sector, setSector] = useState("all");
   const sectors = [...new Set(shipments.map((s) => s.sector))].sort();
   const list = shipments.filter((s) => sector === "all" || s.sector === sector);

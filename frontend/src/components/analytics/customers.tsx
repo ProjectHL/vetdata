@@ -15,7 +15,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { visiblePatients } from "@/lib/analytics";
-import { currentClinic } from "@/lib/lookups";
+import { useCurrentClinic } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { formatCLP, formatRut } from "@/lib/format";
 import {
@@ -36,6 +36,7 @@ const countConfig = { value: { label: "Cantidad", color: "var(--viz-1)" } } sati
 export function Customers() {
   const { grants, invoices } = useStore();
   const { sales } = useRetail();
+  const currentClinic = useCurrentClinic();
   const visible = visiblePatients(grants, currentClinic);
   const kpis = patientKpis(visible);
   const species = speciesDistribution(visible);

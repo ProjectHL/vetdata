@@ -14,15 +14,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { type Appointment, SLOTS } from "@/domain/appointments";
 import type { Patient } from "@/domain/patients";
 import { TODAY, formatDate } from "@/lib/format";
-import { read } from "@/lib/server-state";
-import { doctors as mockDoctors } from "@/mocks/clinic";
+import { useDoctorsAll } from "@/lib/server-state";
 import { useDoctors, useStore } from "@/lib/store";
 import { Field, SuccessPanel } from "./field";
 
 export function ScheduleForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
   const { appointments, addAppointment, rooms } = useStore();
   const doctors = useDoctors();
-  const allDoctors = read("doctors", mockDoctors);
+  const allDoctors = useDoctorsAll();
   const boxes = rooms.filter((r) => r.kind === "box");
   const [date, setDate] = useState(TODAY);
   const [doctorId, setDoctorId] = useState("");

@@ -17,8 +17,7 @@ import {
 import { type Product, type RetailOrderStatus, stockLevel, totalStock } from "@/domain/retail";
 import { formatCLP, formatDate } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
-import { read } from "@/lib/server-state";
-import { retailSuppliers as mockRetailSuppliers } from "@/mocks/retail";
+import { useRetailSuppliers } from "@/lib/server-state";
 
 /** Comprar hasta el doble del punto de compra. */
 function orderQty(p: Product) {
@@ -33,7 +32,7 @@ const statusVariant: Record<RetailOrderStatus, "default" | "secondary" | "outlin
 
 export function RetailPurchasing() {
   const { products, orders, createOrder, sendOrder, receiveOrder } = useRetail();
-  const retailSuppliers = read("retailSuppliers", mockRetailSuppliers);
+  const retailSuppliers = useRetailSuppliers();
   const [notice, setNotice] = useState("");
 
   const onOrder = new Set(orders.filter((o) => o.status !== "Recibida").flatMap((o) => o.items.map((i) => i.productId)));
