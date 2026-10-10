@@ -26,10 +26,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { clinics, currentClinic, getOwner, patients } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { type Patient, type PatientStatus, lastVisit, patientAge } from "@/domain/patients";
 import { formatDate, formatRut, normalizeRut } from "@/lib/format";
+import { useClinics, useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { useCanView } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -69,6 +69,11 @@ export function PetBrowser() {
   const [selected, setSelected] = useState<Patient | null>(null);
   const [origin, setOrigin] = useState<Origin>("all");
   const canView = useCanView();
+  const patients = usePatients();
+  const owners = useOwners();
+  const clinics = useClinics();
+  const currentClinic = useCurrentClinic();
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
 
   const q = query.trim().toLowerCase();
   const r = normalizeRut(rut.trim());
@@ -262,7 +267,9 @@ function FilterSelect({
 }
 
 function PetCard({ patient: p, onClick }: { patient: Patient; onClick: () => void }) {
-  const owner = getOwner(p.ownerRut)!;
+  const owners = useOwners();
+  const currentClinic = useCurrentClinic();
+  const owner = owners.find((o) => o.rut === p.ownerRut)!;
   return (
     <button
       type="button"

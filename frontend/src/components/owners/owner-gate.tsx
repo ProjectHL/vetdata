@@ -4,16 +4,18 @@ import { Lock } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { getOwner, petsOf } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { formatRut } from "@/lib/format";
+import { useOwners, usePatients } from "@/lib/server-state";
 import { useCanView } from "@/lib/store";
 
 /** El detalle del dueño solo se ve si la clínica tiene acceso a al menos una de sus mascotas. */
 export function OwnerGate({ ownerRut, children }: { ownerRut: string; children: React.ReactNode }) {
   const canView = useCanView();
-  const owner = getOwner(ownerRut)!;
-  if (petsOf(ownerRut).some((p) => canView(p.id))) return <>{children}</>;
+  const owners = useOwners();
+  const patients = usePatients();
+  const owner = owners.find((o) => o.rut === ownerRut)!;
+  if (patients.filter((p) => p.ownerRut === ownerRut).some((p) => canView(p.id))) return <>{children}</>;
 
   return (
     <div className="mx-auto flex max-w-xl flex-col gap-6">

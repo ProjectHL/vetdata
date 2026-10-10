@@ -20,8 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { getPatient } from "@/lib/lookups";
 import { type AccessDuration, type AccessScope, DURATIONS, SCOPES } from "@/domain/sharing";
+import { usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 
 export function RequestAccessDialog({
@@ -36,10 +36,11 @@ export function RequestAccessDialog({
   onSent?: (count: number) => void;
 }) {
   const { sendRequest, sharingPolicy } = useStore();
+  const patients = usePatients();
   const [scope, setScope] = useState<AccessScope>(sharingPolicy.defaultScope);
   const [duration, setDuration] = useState<AccessDuration>(sharingPolicy.defaultDuration);
   const [reason, setReason] = useState("");
-  const pets = patientIds.map((id) => getPatient(id)).filter((p) => p !== undefined);
+  const pets = patientIds.map((id) => patients.find((p) => p.id === id)).filter((p) => p !== undefined);
   const origins = [...new Set(pets.map((p) => p.clinic))];
 
   return (

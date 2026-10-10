@@ -11,16 +11,16 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
-import { currentClinic, owners, petsOf } from "@/lib/lookups";
 import { type Owner, ownerName } from "@/domain/owners";
 import { type Patient } from "@/domain/patients";
 import { accessLevel } from "@/domain/sharing";
 import { formatDate, formatRut, normalizeRut } from "@/lib/format";
+import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 
 const EXAMPLES = ["12764509-4", "17398220-8", "15620948-1"];
 
-function findOwner(input: string): Owner | undefined {
+function findOwner(owners: Owner[], input: string): Owner | undefined {
   const r = normalizeRut(input.trim());
   if (!r) return undefined;
   return owners.find((o) => o.rut === r || o.rut.split("-")[0] === r);
@@ -28,13 +28,17 @@ function findOwner(input: string): Owner | undefined {
 
 export function NetworkSearch({ initialRut = "" }: { initialRut?: string }) {
   const { grants, requests } = useStore();
+  const owners = useOwners();
+  const patients = usePatients();
+  const currentClinic = useCurrentClinic();
   const [input, setInput] = useState(initialRut);
   const [searched, setSearched] = useState(initialRut);
   const [selected, setSelected] = useState<string[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [notice, setNotice] = useState("");
 
-  const owner = searched ? findOwner(searched) : undefined;
+  const owner = searched ? findOwner(owners, searched) : undefined;
+  const petsOf = (ownerRut: string) => patients.filter((p) => p.ownerRut === ownerRut);
   const pets = owner ? petsOf(owner.rut) : [];
   const levelOf = (p: Patient) => accessLevel(p, grants, currentClinic).level;
   const pendingOf = (p: Patient) =>

@@ -22,9 +22,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ownerLastVisit, owners, petsOf, sectors } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
+import { lastVisit } from "@/domain/patients";
 import { daysUntil, formatCLP, formatDate, formatRut, normalizeRut } from "@/lib/format";
+import { useOwners, usePatients, useSectors } from "@/lib/server-state";
 import { useCanView } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -35,6 +36,15 @@ export function OwnerList() {
   const [query, setQuery] = useState("");
   const [sector, setSector] = useState("all");
   const canView = useCanView();
+  const owners = useOwners();
+  const patients = usePatients();
+  const sectors = useSectors();
+  const petsOf = (ownerRut: string) => patients.filter((p) => p.ownerRut === ownerRut);
+  const ownerLastVisit = (ownerRut: string) =>
+    petsOf(ownerRut).reduce((max, p) => {
+      const v = lastVisit(p);
+      return v > max ? v : max;
+    }, "");
   const visible = owners.filter((o) => petsOf(o.rut).some((p) => canView(p.id)));
   const kpis = [
     { label: "Propietarios en tu clínica", icon: Users, value: visible.length },

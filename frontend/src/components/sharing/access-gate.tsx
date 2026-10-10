@@ -8,9 +8,9 @@ import { SpeciesIcon } from "@/components/patients/species-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getPatient } from "@/lib/lookups";
 import { durationLabel } from "@/domain/sharing";
 import { formatDate } from "@/lib/format";
+import { usePatients } from "@/lib/server-state";
 import { useAccess, usePendingRequest } from "@/lib/store";
 import { RequestAccessDialog } from "./request-access-dialog";
 
@@ -20,7 +20,8 @@ import { RequestAccessDialog } from "./request-access-dialog";
  */
 export function AccessGate({ patientId, children }: { patientId: string; children: React.ReactNode }) {
   const { level, grant } = useAccess(patientId);
-  const patient = getPatient(patientId)!;
+  const patients = usePatients();
+  const patient = patients.find((p) => p.id === patientId)!;
 
   if (level === "propio") return <>{children}</>;
   if (level === "ninguno") return <LockedRecord patientId={patientId} />;
@@ -55,7 +56,8 @@ export function AccessGate({ patientId, children }: { patientId: string; childre
 }
 
 function PatientHeader({ patientId }: { patientId: string }) {
-  const p = getPatient(patientId)!;
+  const patients = usePatients();
+  const p = patients.find((p) => p.id === patientId)!;
   return (
     <div className="flex items-center gap-4">
       <span className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
@@ -72,7 +74,8 @@ function PatientHeader({ patientId }: { patientId: string }) {
 }
 
 function PatientSummary({ patientId }: { patientId: string }) {
-  const p = getPatient(patientId)!;
+  const patients = usePatients();
+  const p = patients.find((p) => p.id === patientId)!;
   return (
     <>
       <Card>

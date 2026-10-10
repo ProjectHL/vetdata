@@ -3,13 +3,15 @@
 import { Mail, MapPin, Phone, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { currentClinic, networkClinics } from "@/lib/lookups";
 import { grantStatus } from "@/domain/sharing";
+import { useCurrentClinic, useNetworkClinics } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 export function ClinicDirectory() {
   const { grants } = useStore();
+  const networkClinics = useNetworkClinics();
+  const currentClinic = useCurrentClinic();
   const active = grants.filter((g) => grantStatus(g) === "Vigente");
 
   return (

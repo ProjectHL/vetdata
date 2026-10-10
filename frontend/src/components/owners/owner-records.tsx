@@ -11,9 +11,9 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { currentClinic, petsOf } from "@/lib/lookups";
 import { accessLevel } from "@/domain/sharing";
 import { formatCLP, formatDate } from "@/lib/format";
+import { useCurrentClinic, usePatients } from "@/lib/server-state";
 import { useRetail } from "@/lib/retail-store";
 import { useCanView, useStore } from "@/lib/store";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -21,7 +21,8 @@ import { EmptyState } from "@/components/layout/empty-state";
 /** Citas, facturas, derivaciones y visitas del dueño, solo de las mascotas accesibles. */
 export function OwnerRecords({ ownerRut }: { ownerRut: string }) {
   const canView = useCanView();
-  const pets = petsOf(ownerRut).filter((p) => canView(p.id));
+  const patients = usePatients();
+  const pets = patients.filter((p) => p.ownerRut === ownerRut).filter((p) => canView(p.id));
   const petIds = pets.map((p) => p.id);
 
   return (
@@ -100,7 +101,9 @@ function StorePurchases({ ownerRut }: { ownerRut: string }) {
 /** Visitas de todas las mascotas accesibles; con acceso "Resumen clínico" no se incluyen consultas. */
 function VisitsTable({ petIds, ownerRut }: { petIds: string[]; ownerRut: string }) {
   const { grants } = useStore();
-  const pets = petsOf(ownerRut).filter((p) => petIds.includes(p.id));
+  const patients = usePatients();
+  const currentClinic = useCurrentClinic();
+  const pets = patients.filter((p) => p.ownerRut === ownerRut).filter((p) => petIds.includes(p.id));
   const summaryOnly = pets.filter((p) => accessLevel(p, grants, currentClinic).grant?.scope === "Resumen clínico");
   const visits = pets
     .filter((p) => !summaryOnly.includes(p))

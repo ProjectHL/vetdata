@@ -34,10 +34,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { currentClinic, getOwner, getPatient } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { type AccessDuration, type AccessRequest, type AccessScope, DURATIONS, type RequestStatus, SCOPES, durationLabel } from "@/domain/sharing";
 import { formatDate, formatRut } from "@/lib/format";
+import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 
 const statusVariant: Record<RequestStatus, "default" | "secondary" | "destructive"> = {
@@ -52,6 +52,7 @@ const byPriority = (a: AccessRequest, b: AccessRequest) =>
 
 export function RequestTabs() {
   const { requests } = useStore();
+  const currentClinic = useCurrentClinic();
   const received = requests.filter((r) => r.to === currentClinic).sort(byPriority);
   const sent = requests.filter((r) => r.from === currentClinic).sort(byPriority);
   const pending = (list: AccessRequest[]) => list.filter((r) => r.status === "Pendiente").length;
@@ -79,9 +80,11 @@ export function RequestTabs() {
 
 function ReceivedCard({ request: r }: { request: AccessRequest }) {
   const { respondRequest } = useStore();
+  const patients = usePatients();
+  const owners = useOwners();
   const [open, setOpen] = useState(false);
-  const p = getPatient(r.patientId)!;
-  const owner = getOwner(r.ownerRut)!;
+  const p = patients.find((p) => p.id === r.patientId)!;
+  const owner = owners.find((o) => o.rut === r.ownerRut)!;
 
   return (
     <Card>
@@ -137,11 +140,13 @@ function ApproveDialog({
   onOpenChange: (o: boolean) => void;
 }) {
   const { respondRequest, sharingPolicy } = useStore();
+  const patients = usePatients();
+  const owners = useOwners();
   const [scope, setScope] = useState<AccessScope>(r.scope);
   const [duration, setDuration] = useState<AccessDuration>(r.duration);
   const [consent, setConsent] = useState(false);
-  const owner = getOwner(r.ownerRut)!;
-  const p = getPatient(r.patientId)!;
+  const owner = owners.find((o) => o.rut === r.ownerRut)!;
+  const p = patients.find((p) => p.id === r.patientId)!;
   // La política de la clínica define si se exige confirmar la autorización del dueño.
   const needsConsent = sharingPolicy.requireConsent && !owner.shareConsent;
 
@@ -202,6 +207,7 @@ function ApproveDialog({
 
 function SentTable({ requests }: { requests: AccessRequest[] }) {
   const { respondRequest } = useStore();
+  const patients = usePatients();
   return (
     <Card>
       <CardContent className="flex flex-col gap-3">
@@ -223,7 +229,7 @@ function SentTable({ requests }: { requests: AccessRequest[] }) {
           </TableHeader>
           <TableBody>
             {requests.map((r) => {
-              const p = getPatient(r.patientId)!;
+              const p = patients.find((p) => p.id === r.patientId)!;
               return (
                 <TableRow key={r.id}>
                   <TableCell>

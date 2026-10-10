@@ -23,10 +23,10 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { currentClinic, getOwner, getPatient } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { type AccessGrant, type GrantStatus, grantStatus } from "@/domain/sharing";
 import { formatDate, formatRut } from "@/lib/format";
+import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { EmptyState } from "@/components/layout/empty-state";
 
@@ -38,6 +38,7 @@ const statusVariant: Record<GrantStatus, "default" | "secondary" | "outline"> = 
 
 export function SharedTabs() {
   const { grants } = useStore();
+  const currentClinic = useCurrentClinic();
   const withMe = grants.filter((g) => g.grantedTo === currentClinic);
   const byMe = grants.filter((g) => g.ownerClinic === currentClinic);
   const vigentes = (list: AccessGrant[]) => list.filter((g) => grantStatus(g) === "Vigente").length;
@@ -101,6 +102,8 @@ function GrantTable({
   canRevoke?: boolean;
 }) {
   const { revokeGrant } = useStore();
+  const patients = usePatients();
+  const owners = useOwners();
   if (grants.length === 0) {
     return <EmptyState title="No hay accesos." />;
   }
@@ -120,8 +123,8 @@ function GrantTable({
       </TableHeader>
       <TableBody>
         {grants.map((g) => {
-          const p = getPatient(g.patientId)!;
-          const owner = getOwner(p.ownerRut)!;
+          const p = patients.find((p) => p.id === g.patientId)!;
+          const owner = owners.find((o) => o.rut === p.ownerRut)!;
           const status = grantStatus(g);
           return (
             <TableRow key={g.id}>

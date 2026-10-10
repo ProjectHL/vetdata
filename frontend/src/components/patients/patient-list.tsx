@@ -20,10 +20,10 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getOwner, patients } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { lastVisit } from "@/domain/patients";
 import { formatDate } from "@/lib/format";
+import { useOwners, usePatients } from "@/lib/server-state";
 import { useCanView } from "@/lib/store";
 import { SpeciesIcon } from "./species-icon";
 import { StatusBadge } from "./status-badge";
@@ -37,6 +37,9 @@ export function PatientList() {
   const [query, setQuery] = useState("");
   const [species, setSpecies] = useState("all");
   const canView = useCanView();
+  const patients = usePatients();
+  const owners = useOwners();
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
 
   const q = query.trim().toLowerCase();
   const rows = patients

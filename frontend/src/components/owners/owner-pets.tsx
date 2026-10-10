@@ -6,8 +6,8 @@ import { PatientQuickView, useNextAppointment } from "@/components/care-actions/
 import { Guard } from "@/components/settings/guard";
 import { SpeciesIcon } from "@/components/patients/species-icon";
 import { StatusBadge } from "@/components/patients/status-badge";
-import { currentClinic, getPatient } from "@/lib/lookups";
 import { type Patient, lastVisit, patientAge } from "@/domain/patients";
+import { useCurrentClinic, usePatients } from "@/lib/server-state";
 import { RequestAccessDialog } from "@/components/sharing/request-access-dialog";
 import { AccessBadge } from "@/components/sharing/access-badge";
 import { Button } from "@/components/ui/button";
@@ -16,7 +16,8 @@ import { useAccess, usePendingRequest } from "@/lib/store";
 
 export function OwnerPets({ patientIds }: { patientIds: string[] }) {
   const [selected, setSelected] = useState<Patient | null>(null);
-  const pets = patientIds.map((id) => getPatient(id)!);
+  const patients = usePatients();
+  const pets = patientIds.map((id) => patients.find((p) => p.id === id)!);
   return (
     <>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
@@ -64,6 +65,7 @@ function LockedTile({ patient: p }: { patient: Patient }) {
 
 function PetTile({ patient: p, onClick }: { patient: Patient; onClick: () => void }) {
   const next = useNextAppointment(p.id);
+  const currentClinic = useCurrentClinic();
   return (
     <button
       type="button"
