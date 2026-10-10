@@ -564,7 +564,7 @@ func (s *Server) listIdeas(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
-	rows, err := s.pool.Query(r.Context(), "SELECT * FROM ("+q+" ORDER BY i.created_at DESC,i.id LIMIT $"+itoa(len(args)+1)+" OFFSET $"+itoa(len(args)+2)+") v", append(args, limit, offset)...)
+	rows, err := s.pool.Query(r.Context(), q+" ORDER BY i.created_at DESC,i.id LIMIT $"+itoa(len(args)+1)+" OFFSET $"+itoa(len(args)+2)+") v", append(args, limit, offset)...)
 	if err != nil {
 		return err
 	}
