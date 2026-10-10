@@ -17,18 +17,18 @@ function petsOf(ownerRut: string) {
   return read("patients", mockPatients).filter((p) => p.ownerRut === ownerRut);
 }
 
-export function retailKpis(sales: Sale[], products: Product[]) {
-  const today = sales.filter((s) => s.date === TODAY);
+export function retailKpis(sales: Sale[], products: Product[], today = TODAY) {
+  const todaySales = sales.filter((s) => s.date === today);
   return {
-    todayTotal: today.reduce((s, x) => s + x.total, 0),
-    todayCount: today.length,
+    todayTotal: todaySales.reduce((s, x) => s + x.total, 0),
+    todayCount: todaySales.length,
     refill: products.filter((p) => p.stock.sala < p.shelfMin && p.stock.central > 0).length,
   };
 }
 
 /** Ventas netas de la tienda en el mes en curso (sin despacho). */
-export function retailMonthNet(sales: Sale[]) {
-  const month = TODAY.slice(0, 7);
+export function retailMonthNet(sales: Sale[], today = TODAY) {
+  const month = today.slice(0, 7);
   return Math.round(
     sales.filter((s) => s.date.startsWith(month)).reduce((s, x) => s + net(x.total - x.deliveryFee), 0)
   );
@@ -99,9 +99,9 @@ export function productTurnover(sales: Sale[], products: Product[]): ProductTurn
   });
 }
 
-export function shipmentKpis(shipments: Shipment[]) {
+export function shipmentKpis(shipments: Shipment[], today = TODAY) {
   const delivered = shipments.filter((s) => s.status === "Entregado");
-  const late = shipments.filter((s) => s.status !== "Entregado" && s.scheduledFor < TODAY);
+  const late = shipments.filter((s) => s.status !== "Entregado" && s.scheduledFor < today);
   // En el prototipo una entrega es "a tiempo" si se marcó entregada (las semillas se entregan en la fecha programada).
   const onTimePct = Math.round((delivered.length / Math.max(1, delivered.length + late.length)) * 100);
   return {

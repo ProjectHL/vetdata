@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/table";
 import { ownerName } from "@/domain/owners";
 import { CATEGORIES, PAYMENT_METHODS, type Sale } from "@/domain/retail";
-import { TODAY, formatCLP, formatDate } from "@/lib/format";
+import { formatCLP, formatDate, useToday } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
 import { useOwners } from "@/lib/server-state";
 import { Receipt } from "./receipt";
@@ -40,8 +40,10 @@ export function SalesReport() {
   const [channel, setChannel] = useState("all");
   const [payment, setPayment] = useState("all");
   const [open, setOpen] = useState<Sale | null>(null);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const todayDate = useToday();
 
-  const today = sales.filter((s) => s.date === TODAY);
+  const today = sales.filter((s) => s.date === todayDate);
   const revenue = sales.reduce((s, x) => s + x.total, 0);
   const web = sales.filter((s) => s.channel === "Web").length;
 

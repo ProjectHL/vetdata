@@ -25,7 +25,7 @@ import {
 import { useDoctorsAll, useOwners, usePatients } from "@/lib/server-state";
 import { type Doctor, type Room, type RoomStatus } from "@/domain/clinic";
 import { ownerName } from "@/domain/owners";
-import { NOW_TIME, minutesSince } from "@/lib/format";
+import { minutesSince, useNowTime } from "@/lib/format";
 import { useCanView, useDoctors, useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { kindIcon, statusMeta } from "./room-status";
@@ -36,9 +36,9 @@ function doctorById(doctors: Doctor[], id?: string) {
   return doctors.find((d) => d.id === id);
 }
 
-function elapsed(since?: string) {
+function elapsed(since: string | undefined, now: string) {
   if (!since) return null;
-  const min = minutesSince(since);
+  const min = minutesSince(since, now);
   return min < 60 ? `${min} min` : `${Math.floor(min / 60)} h ${min % 60} min`;
 }
 
@@ -46,6 +46,8 @@ export function ClinicActivity() {
   const { rooms, updateRoom } = useStore();
   const [filter, setFilter] = useState<RoomStatus | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // T5-5: hora real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const now = useNowTime();
 
   const clinicalRooms = rooms.filter((r) => r.kind !== "comun");
   const activeDoctors = useDoctors();
@@ -89,7 +91,7 @@ export function ClinicActivity() {
           <CardHeader>
             <CardTitle>Plano de la clínica</CardTitle>
             <CardDescription>
-              Estado en tiempo real · actualizado {NOW_TIME} h
+              Estado en tiempo real · actualizado {now} h
               {filter && (
                 <>
                   {" · "}
@@ -181,6 +183,7 @@ function RoomTile({ room, dimmed, onClick }: { room: Room; dimmed: boolean; onCl
   const meta = statusMeta[room.status];
   const doctorsAll = useDoctorsAll();
   const patients = usePatients();
+  const now = useNowTime();
   const doctor = doctorById(doctorsAll, room.doctorId);
   const patient = patients.find((p) => p.id === (room.patientId ?? ""));
 
@@ -219,12 +222,12 @@ function RoomTile({ room, dimmed, onClick }: { room: Room; dimmed: boolean; onCl
           </div>
           <span className="ml-auto flex shrink-0 items-center gap-1 text-[11px] text-muted-foreground tabular-nums">
             <Clock className="size-3" />
-            {elapsed(room.since)}
+            {elapsed(room.since, now)}
           </span>
         </div>
       ) : room.status === "limpieza" ? (
         <p className="mt-auto text-xs text-muted-foreground">
-          Limpieza iniciada hace {elapsed(room.since)}
+          Limpieza iniciada hace {elapsed(room.since, now)}
         </p>
       ) : (
         <p className="mt-auto text-xs text-muted-foreground">{room.note ?? "Lista para recibir paciente"}</p>
@@ -256,6 +259,8 @@ function RoomSheet({
 
   const busyDoctors = new Set(rooms.filter((r) => r.status === "ocupado").map((r) => r.doctorId));
   const busyPatients = new Set(rooms.filter((r) => r.status === "ocupado").map((r) => r.patientId));
+  // T5-5: hora real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const now = useNowTime();
   const doctor = doctorById(doctorsAll, room?.doctorId);
   const patient = getPatient(room?.patientId ?? "");
   const meta = room ? statusMeta[room.status] : null;
@@ -304,7 +309,7 @@ function RoomSheet({
                       </Link>
                     }
                   />
-                  <Detail label="Tiempo en atención" value={elapsed(room.since)} />
+                  <Detail label="Tiempo en atención" value={elapsed(room.since, now)} />
                   {patient.allergies.length > 0 && (
                     <Detail
                       label="Alergias"
@@ -347,7 +352,7 @@ function RoomSheet({
 
             <SheetFooter>
               {room.status === "ocupado" && (
-                <Button onClick={() => onUpdate(room.id, { status: "limpieza", doctorId: undefined, patientId: undefined, since: NOW_TIME })}>
+                <Button onClick={() => onUpdate(room.id, { status: "limpieza", doctorId: undefined, patientId: undefined, since: now })}>
                   Finalizar atención y enviar a limpieza
                 </Button>
               )}
@@ -360,7 +365,7 @@ function RoomSheet({
                 <Button
                   disabled={!doctorId || !patientId}
                   onClick={() => {
-                    onUpdate(room.id, { status: "ocupado", doctorId, patientId, since: NOW_TIME });
+                    onUpdate(room.id, { status: "ocupado", doctorId, patientId, since: now });
                     setDoctorId("");
                     setPatientId("");
                   }}

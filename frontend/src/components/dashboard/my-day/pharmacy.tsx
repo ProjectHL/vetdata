@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { useRetailSuppliers, useSuppliers } from "@/lib/server-state";
-import { formatCLP, formatDate } from "@/lib/format";
+import { formatCLP, formatDate, useToday } from "@/lib/format";
 import { expiringValue, pharmacyKpis } from "@/lib/metrics/pharmacy";
 import { retailKpis } from "@/lib/metrics/retail";
 import { useRetail } from "@/lib/retail-store";
@@ -20,9 +20,11 @@ export function PharmacyDay() {
   const suppliers = useSuppliers();
   const retailSuppliers = useRetailSuppliers();
   const getSupplier = (id: string) => suppliers.find((s) => s.id === id);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
   const kpis = pharmacyKpis(medications, referrals);
-  const expiring = expiringValue(medications);
-  const retail = retailKpis(sales, products);
+  const expiring = expiringValue(medications, today);
+  const retail = retailKpis(sales, products, today);
   const incoming = [
     ...purchaseOrders.filter((o) => o.status === "Enviada").map((o) => ({ id: o.id, label: `Farmacia · OC ${o.number}`, who: getSupplier(o.supplierId)?.name, receive: () => receivePurchaseOrder(o.id) })),
     ...orders.filter((o) => o.status === "Enviada").map((o) => ({ id: o.id, label: `Tienda · OC ${o.number}`, who: retailSuppliers.find((s) => s.id === o.supplierId)?.name, receive: () => receiveOrder(o.id) })),

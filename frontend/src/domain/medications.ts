@@ -1,4 +1,4 @@
-import { daysUntil } from "@/lib/format";
+import { TODAY, daysUntil } from "@/lib/format";
 
 export type MedCategory =
   | "Antibiótico"
@@ -40,8 +40,8 @@ export type ExpiryStatus = "vencido" | "por vencer" | "ok";
 
 export const EXPIRY_WARNING_DAYS = 60;
 
-export function expiryStatus(m: Medication): ExpiryStatus {
-  const days = daysUntil(m.expiry);
+export function expiryStatus(m: Medication, today = TODAY): ExpiryStatus {
+  const days = daysUntil(m.expiry, today);
   if (days < 0) return "vencido";
   if (days <= EXPIRY_WARNING_DAYS) return "por vencer";
   return "ok";

@@ -19,7 +19,7 @@ import {
 } from "@/components/ui/table";
 import type { AppointmentStatus } from "@/domain/appointments";
 import type { Invoice } from "@/domain/invoices";
-import { TODAY, formatCLP, formatDate } from "@/lib/format";
+import { formatCLP, formatDate, useToday } from "@/lib/format";
 import { useDoctorsAll, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { InvoicePreview } from "./invoice-form";
@@ -44,6 +44,8 @@ export function AppointmentsTable({ patientIds, showPatient }: Props) {
   const { appointments, rooms } = useStore();
   const patients = usePatients();
   const doctors = useDoctorsAll();
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
   const rows = appointments
     .filter((a) => patientIds.includes(a.patientId))
     .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
@@ -62,7 +64,7 @@ export function AppointmentsTable({ patientIds, showPatient }: Props) {
       </TableHeader>
       <TableBody>
         {rows.map((a) => (
-          <TableRow key={a.id} className={a.date < TODAY ? "text-muted-foreground" : undefined}>
+          <TableRow key={a.id} className={a.date < today ? "text-muted-foreground" : undefined}>
             <TableCell className="tabular-nums">{formatDate(a.date)} · {a.time}</TableCell>
             {showPatient && <TableCell className="font-medium">{patients.find((p) => p.id === a.patientId)?.name}</TableCell>}
             <TableCell>{doctors.find((d) => d.id === a.doctorId)?.name}</TableCell>

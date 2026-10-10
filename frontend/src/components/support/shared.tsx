@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { PRIORITIES, SLA_HOURS, type SlaState, TICKET_CATEGORIES, type Ticket, type TicketCategory, type TicketPriority, type TicketStatus, slaState } from "@/domain/support";
-import { formatHours } from "@/lib/format";
+import { formatHours, useNowIso } from "@/lib/format";
 import { channels } from "@/lib/nav";
 import { useStore } from "@/lib/store";
 import { useSupport } from "@/lib/support-store";
@@ -90,7 +90,9 @@ const slaStyle: Record<SlaState, { icon: React.ComponentType<{ className?: strin
 
 /** Estado del SLA de primera respuesta, con ícono + texto (nunca solo color). */
 export function SlaIndicator({ ticket }: { ticket: Ticket }) {
-  const { state, hoursLeft } = slaState(ticket);
+  // T5-5: momento real tras el montaje en modo http (fijo en mock/SSR, sin mismatch).
+  const now = useNowIso();
+  const { state, hoursLeft } = slaState(ticket, now);
   const { icon: Icon, className } = slaStyle[state];
   const detail =
     state === "En plazo" || state === "En riesgo"

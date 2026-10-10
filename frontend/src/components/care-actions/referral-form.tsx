@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { type Medication, stockStatus } from "@/domain/medications";
 import type { Patient } from "@/domain/patients";
 import { INTERNAL_PHARMACY, type Referral, type ReferralItem } from "@/domain/referrals";
-import { TODAY } from "@/lib/format";
+import { useToday } from "@/lib/format";
 import { useClinics, useCurrentClinic } from "@/lib/server-state";
 import { useDoctors, useStore } from "@/lib/store";
 import { Field, SuccessPanel } from "./field";
@@ -52,6 +52,8 @@ export function ReferralForm({ patient, onDone }: { patient: Patient; onDone: ()
   const [picker, setPicker] = useState("");
   const [notes, setNotes] = useState("");
   const [created, setCreated] = useState<Referral | null>(null);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
 
   const update = (key: number, patch: Partial<Row>) =>
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));
@@ -199,7 +201,7 @@ export function ReferralForm({ patient, onDone }: { patient: Patient; onDone: ()
             setCreated(
               addReferral({
                 patientId: patient.id,
-                date: TODAY,
+                date: today,
                 doctorId,
                 destination,
                 items: rows.map(({ medicationId, dose, frequency, duration, qty }) => ({ medicationId, dose, frequency, duration, qty })),

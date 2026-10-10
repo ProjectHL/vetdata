@@ -13,7 +13,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { type Appointment, SLOTS } from "@/domain/appointments";
 import type { Patient } from "@/domain/patients";
-import { TODAY, formatDate } from "@/lib/format";
+import { TODAY, formatDate, useToday } from "@/lib/format";
 import { useDoctorsAll } from "@/lib/server-state";
 import { useDoctors, useStore } from "@/lib/store";
 import { Field, SuccessPanel } from "./field";
@@ -29,6 +29,8 @@ export function ScheduleForm({ patient, onDone }: { patient: Patient; onDone: ()
   const [roomId, setRoomId] = useState(boxes[0].id);
   const [reason, setReason] = useState("");
   const [created, setCreated] = useState<Appointment | null>(null);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
 
   const taken = new Set(
     appointments
@@ -73,7 +75,7 @@ export function ScheduleForm({ patient, onDone }: { patient: Patient; onDone: ()
           </Select>
         </Field>
         <Field label="Fecha" htmlFor="appt-date">
-          <Input id="appt-date" type="date" min={TODAY} value={date} onChange={(e) => { setDate(e.target.value); setTime(""); }} />
+          <Input id="appt-date" type="date" min={today} value={date} onChange={(e) => { setDate(e.target.value); setTime(""); }} />
         </Field>
         <Field label="Box">
           <Select value={roomId} onValueChange={setRoomId}>

@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useDoctorsAll, useOwners, usePatients } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { WAITING_CAPACITY } from "@/domain/security";
-import { formatCLP, minutesSince } from "@/lib/format";
+import { formatCLP, minutesSince, useNowTime, useToday } from "@/lib/format";
 import { expectedArrivals, todayAppointments } from "@/lib/metrics/day";
 import { retailKpis } from "@/lib/metrics/retail";
 import { useRetail } from "@/lib/retail-store";
@@ -30,14 +30,17 @@ export function ReceptionDay() {
   const owners = useOwners();
   const getPatient = (id: string) => patients.find((p) => p.id === id);
   const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
-  const today = todayAppointments(appointments).filter((a) => a.status !== "Cancelada");
-  const expected = expectedArrivals(appointments, access, waiting, rooms);
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR).
+  const today = useToday();
+  const now = useNowTime();
+  const todayList = todayAppointments(appointments, today).filter((a) => a.status !== "Cancelada");
+  const expected = expectedArrivals(appointments, access, waiting, rooms, today, now);
   const people = waiting.reduce((s, w) => s + w.people, 0);
-  const retail = retailKpis(sales, products);
+  const retail = retailKpis(sales, products, today);
   const toPrepare = shipments.filter((s) => s.status === "Por preparar").length;
 
   // Cobros: dueños que vienen hoy con facturas emitidas o saldo pendiente.
-  const todayOwners = [...new Set(today.map((a) => getPatient(a.patientId)?.ownerRut).filter(Boolean))] as string[];
+  const todayOwners = [...new Set(todayList.map((a) => getPatient(a.patientId)?.ownerRut).filter(Boolean))] as string[];
   const charges = todayOwners
     .map((rut) => {
       const owner = getOwner(rut)!;
@@ -49,7 +52,7 @@ export function ReceptionDay() {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <LinkTile icon={CalendarDays} label="Citas de hoy" value={today.length} hint={`${today.filter((a) => a.status === "Confirmada").length} confirmadas`} href="/inicio/agenda" />
+        <LinkTile icon={CalendarDays} label="Citas de hoy" value={todayList.length} hint={`${todayList.filter((a) => a.status === "Confirmada").length} confirmadas`} href="/inicio/agenda" />
         <LinkTile icon={LogIn} label="Por llegar" value={expected.length} hint="Sin registro de ingreso" href="/seguridad/hall" tone="text-muted-foreground" />
         <LinkTile icon={Users} label="Sala de espera" value={`${people}/${WAITING_CAPACITY}`} hint={`${waiting.length} mascotas`} href="/seguridad/sala-espera" tone="text-amber-600 dark:text-amber-400" />
         <LinkTile icon={ShoppingBag} label="Ventas tienda hoy" value={formatCLP(retail.todayTotal)} hint={`${retail.todayCount} boletas`} href="/tienda/ventas" tone="text-muted-foreground" />
@@ -91,7 +94,7 @@ export function ReceptionDay() {
             {waiting.map((w) => {
               const appt = appointments.find((a) => a.id === w.appointmentId)!;
               const p = getPatient(appt.patientId)!;
-              const min = minutesSince(w.arrivedAt);
+              const min = minutesSince(w.arrivedAt, now);
               return (
                 <div key={w.id} className="flex items-center gap-2 rounded-lg border p-2.5 text-sm">
                   <SpeciesIcon species={p.species} className="size-4 text-primary" />

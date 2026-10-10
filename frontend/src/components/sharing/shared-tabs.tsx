@@ -25,7 +25,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ownerName } from "@/domain/owners";
 import { type AccessGrant, type GrantStatus, grantStatus } from "@/domain/sharing";
-import { formatDate, formatRut } from "@/lib/format";
+import { formatDate, formatRut, useToday } from "@/lib/format";
 import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -41,7 +41,9 @@ export function SharedTabs() {
   const currentClinic = useCurrentClinic();
   const withMe = grants.filter((g) => g.grantedTo === currentClinic);
   const byMe = grants.filter((g) => g.ownerClinic === currentClinic);
-  const vigentes = (list: AccessGrant[]) => list.filter((g) => grantStatus(g) === "Vigente").length;
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
+  const vigentes = (list: AccessGrant[]) => list.filter((g) => grantStatus(g, today) === "Vigente").length;
 
   return (
     <Tabs defaultValue="conmigo">
@@ -68,7 +70,9 @@ export function SharedTabs() {
 
 function SharedByMe({ grants }: { grants: AccessGrant[] }) {
   const [status, setStatus] = useState<"all" | GrantStatus>("all");
-  const rows = grants.filter((g) => status === "all" || grantStatus(g) === status);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
+  const rows = grants.filter((g) => status === "all" || grantStatus(g, today) === status);
   return (
     <Card>
       <CardContent className="flex flex-col gap-3">
@@ -104,6 +108,8 @@ function GrantTable({
   const { revokeGrant } = useStore();
   const patients = usePatients();
   const owners = useOwners();
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
   if (grants.length === 0) {
     return <EmptyState title="No hay accesos." />;
   }
@@ -125,7 +131,7 @@ function GrantTable({
         {grants.map((g) => {
           const p = patients.find((p) => p.id === g.patientId)!;
           const owner = owners.find((o) => o.rut === p.ownerRut)!;
-          const status = grantStatus(g);
+          const status = grantStatus(g, today);
           return (
             <TableRow key={g.id}>
               <TableCell>

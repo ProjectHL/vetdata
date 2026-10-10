@@ -4,6 +4,7 @@ import { Mail, MapPin, Phone, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { grantStatus } from "@/domain/sharing";
+import { useToday } from "@/lib/format";
 import { useCurrentClinic, useNetworkClinics } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
@@ -12,7 +13,9 @@ export function ClinicDirectory() {
   const { grants } = useStore();
   const networkClinics = useNetworkClinics();
   const currentClinic = useCurrentClinic();
-  const active = grants.filter((g) => grantStatus(g) === "Vigente");
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
+  const active = grants.filter((g) => grantStatus(g, today) === "Vigente");
 
   return (
     <div className="flex flex-col gap-3">

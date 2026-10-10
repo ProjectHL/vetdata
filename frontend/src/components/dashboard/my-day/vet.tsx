@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { INTERNAL_PHARMACY } from "@/domain/referrals";
-import { NOW_TIME, minutesSince } from "@/lib/format";
+import { minutesSince, useNowTime, useToday } from "@/lib/format";
 import { appointmentStage, stageStyle, todayAppointments } from "@/lib/metrics/day";
 import { useSecurity } from "@/lib/security-store";
 import { useCan, useStore } from "@/lib/store";
@@ -26,8 +26,11 @@ export function VetDay() {
   const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
   const can = useCan();
   const myId = currentUser.doctorId;
-  const mine = todayAppointments(appointments).filter((a) => a.doctorId === myId && a.status !== "Cancelada");
-  const stageOf = (a: (typeof mine)[number]) => appointmentStage(a, waiting, rooms);
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR, sin mismatch).
+  const today = useToday();
+  const now = useNowTime();
+  const mine = todayAppointments(appointments, today).filter((a) => a.doctorId === myId && a.status !== "Cancelada");
+  const stageOf = (a: (typeof mine)[number]) => appointmentStage(a, waiting, rooms, today, now);
   const myRoom = rooms.find((r) => r.status === "ocupado" && r.doctorId === myId);
   const current = myRoom ? getPatient(myRoom.patientId ?? "") : undefined;
   const myReferrals = referrals.filter((r) => r.doctorId === myId && r.destination === INTERNAL_PHARMACY && r.status !== "Dispensada");
@@ -64,7 +67,7 @@ export function VetDay() {
                 const box = freeBoxes.find((b) => b.id === a.roomId) ?? freeBoxes[0];
                 return (
                   <li key={a.id} className="relative">
-                    <span className={cn("absolute top-3 -left-[25px] size-2.5 rounded-full ring-4 ring-card", a.time <= NOW_TIME ? "bg-primary" : "bg-muted-foreground/40")} />
+                    <span className={cn("absolute top-3 -left-[25px] size-2.5 rounded-full ring-4 ring-card", a.time <= now ? "bg-primary" : "bg-muted-foreground/40")} />
                     <div className={cn("flex flex-wrap items-center gap-3 rounded-lg border p-3 text-sm", stageStyle[s])}>
                       <span className="w-11 font-semibold tabular-nums">{a.time}</span>
                       <SpeciesIcon species={p.species} className="size-4" />
@@ -73,7 +76,7 @@ export function VetDay() {
                         <span className="text-muted-foreground"> · {a.reason} · {ownerName(getOwner(p.ownerRut)!)}</span>
                         {w?.alert && <p className="text-xs text-amber-700 dark:text-amber-300">{w.alert}</p>}
                       </div>
-                      <Badge variant="outline">{s}{w && ` · ${minutesSince(w.arrivedAt)} min`}</Badge>
+                        <Badge variant="outline">{s}{w && ` · ${minutesSince(w.arrivedAt, now)} min`}</Badge>
                       {w && box && !myRoom && (
                         <Button size="sm" onClick={() => callFromWaiting(w.id, box.id)}>
                           <ArrowRightToLine /> Llamar a {box.name}
@@ -97,7 +100,7 @@ export function VetDay() {
                 <>
                   <p>
                     <Link href={`/pacientes/historial/${current.id}`} className="font-semibold hover:text-primary hover:underline">{current.name}</Link>
-                    <span className="text-muted-foreground"> en {rooms.find((r) => r.id === myRoom.id)?.name} desde las {myRoom.since} ({minutesSince(myRoom.since ?? NOW_TIME)} min)</span>
+                    <span className="text-muted-foreground"> en {rooms.find((r) => r.id === myRoom.id)?.name} desde las {myRoom.since} ({minutesSince(myRoom.since ?? now, now)} min)</span>
                   </p>
                   {current.allergies.length > 0 && <p className="text-xs text-destructive">Alergias: {current.allergies.join(", ")}</p>}
                   <Button
@@ -105,7 +108,7 @@ export function VetDay() {
                     onClick={() => {
                       const appt = mine.find((a) => a.patientId === current.id && stageOf(a) === "En box");
                       if (appt) updateAppointment(appt.id, { status: "Realizada" });
-                      updateRoom(myRoom.id, { status: "limpieza", doctorId: undefined, patientId: undefined, since: NOW_TIME });
+                      updateRoom(myRoom.id, { status: "limpieza", doctorId: undefined, patientId: undefined, since: now });
                     }}
                   >
                     Finalizar atención y enviar box a limpieza

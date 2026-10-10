@@ -1,6 +1,6 @@
 import { type Patient, type Vaccine } from "@/domain/patients";
 import { type AccessGrant, accessLevel } from "@/domain/sharing";
-import { daysUntil } from "@/lib/format";
+import { TODAY, daysUntil } from "@/lib/format";
 import { read } from "@/lib/server-state";
 import { owners as mockOwners } from "@/mocks/owners";
 import { patients as mockPatients } from "@/mocks/patients";
@@ -11,39 +11,40 @@ function getOwner(rut: string) {
 }
 
 /** Universo de "mi clínica": propios + compartidos vigentes (misma regla que el resto del producto). */
-export function visiblePatients(grants: AccessGrant[], clinic: string) {
-  return read("patients", mockPatients).filter((p) => accessLevel(p, grants, clinic).level !== "ninguno");
+export function visiblePatients(grants: AccessGrant[], clinic: string, today = TODAY) {
+  return read("patients", mockPatients).filter((p) => accessLevel(p, grants, clinic, today).level !== "ninguno");
 }
 
 export type VaccineState = "vencida" | "próxima" | "vigente";
 
-export function vaccineState(v: Vaccine): VaccineState {
+/** Lógica intacta (T5-5): `today` solo permite evaluar con la fecha real en modo http; por defecto es el fijo. */
+export function vaccineState(v: Vaccine, today = TODAY): VaccineState {
   if (!v.nextDose) return "vigente";
-  const d = daysUntil(v.nextDose);
+  const d = daysUntil(v.nextDose, today);
   if (d < 0) return "vencida";
   if (d <= 30) return "próxima";
   return "vigente";
 }
 
 /** Paciente "al día" = tiene al menos una vacuna y ninguna vencida. */
-export function isUpToDate(p: Patient) {
-  return p.vaccines.length > 0 && p.vaccines.every((v) => vaccineState(v) !== "vencida");
+export function isUpToDate(p: Patient, today = TODAY) {
+  return p.vaccines.length > 0 && p.vaccines.every((v) => vaccineState(v, today) !== "vencida");
 }
 
-export function coverage(list: Patient[]) {
+export function coverage(list: Patient[], today = TODAY) {
   const withRecord = list.filter((p) => p.vaccines.length > 0);
   if (withRecord.length === 0) return 0;
-  return Math.round((withRecord.filter(isUpToDate).length / withRecord.length) * 100);
+  return Math.round((withRecord.filter((p) => isUpToDate(p, today)).length / withRecord.length) * 100);
 }
 
 export type DueVaccine = { patient: Patient; vaccine: Vaccine; state: VaccineState; days: number };
 
 /** Vacunas vencidas o por vencer (≤ 30 días), más urgentes primero. */
-export function dueVaccines(list: Patient[]): DueVaccine[] {
+export function dueVaccines(list: Patient[], today = TODAY): DueVaccine[] {
   return list
     .flatMap((patient) =>
       patient.vaccines
-        .map((vaccine) => ({ patient, vaccine, state: vaccineState(vaccine), days: daysUntil(vaccine.nextDose ?? "") }))
+        .map((vaccine) => ({ patient, vaccine, state: vaccineState(vaccine, today), days: daysUntil(vaccine.nextDose ?? "", today) }))
         .filter((d) => d.state !== "vigente")
     )
     .sort((a, b) => a.days - b.days);

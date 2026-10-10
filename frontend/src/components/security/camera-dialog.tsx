@@ -30,7 +30,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { type Doctor } from "@/domain/clinic";
 import { type Camera, ZONES } from "@/domain/security";
-import { NOW_TIME, TODAY } from "@/lib/format";
+import { useNowTime, useToday } from "@/lib/format";
 import { useDoctorsAll, usePatients } from "@/lib/server-state";
 import { usePrivacy, useSecurity } from "@/lib/security-store";
 import { useCan } from "@/lib/store";
@@ -110,7 +110,10 @@ function CameraDialogBody({ camera, initialRecordingAt }: { camera: Camera; init
   }, [canOpenRecording, camera.id, initialRecordingAt, logAudit]);
 
   const view: FeedView = recordingAt ? "recording" : base.view === "private" && override ? "live" : base.view;
-  const todayEvents = events.filter((e) => e.cameraId === camera.id && e.at.startsWith(TODAY));
+  // T5-5: fecha/hora real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
+  const now = useNowTime();
+  const todayEvents = events.filter((e) => e.cameraId === camera.id && e.at.startsWith(today));
   const move = (dx: number, dy: number) => setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
 
   return (
@@ -222,7 +225,7 @@ function CameraDialogBody({ camera, initialRecordingAt }: { camera: Camera; init
           <div className="relative grid grid-cols-24 gap-px overflow-hidden rounded-md">
             {HOURS.map((h) => {
               const hasEvent = todayEvents.some((e) => Number(e.at.slice(11, 13)) === h);
-              const future = h > Number(NOW_TIME.slice(0, 2));
+              const future = h > Number(now.slice(0, 2));
               return (
                 <button
                   key={h}

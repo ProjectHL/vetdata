@@ -34,7 +34,7 @@ import {
 } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { type Patient } from "@/domain/patients";
-import { formatDate } from "@/lib/format";
+import { formatDate, useToday } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { ExportButton, NetworkTag, StatTile, clinicVsNetwork } from "./shared";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -46,12 +46,14 @@ export function Vaccination() {
   const vaccineCoverage = useVaccineCoverage();
   const coverageByVaccine = useCoverageByVaccine();
   const [scheduling, setScheduling] = useState<Patient | null>(null);
-  const mine = visiblePatients(grants, currentClinic);
-  const due = dueVaccines(mine);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
+  const mine = visiblePatients(grants, currentClinic, today);
+  const due = dueVaccines(mine, today);
   const overdue = due.filter((d) => d.state === "vencida").length;
   const soon = due.length - overdue;
-  const myCoverage = coverage(mine);
-  const networkCoverage = coverage(patients);
+  const myCoverage = coverage(mine, today);
+  const networkCoverage = coverage(patients, today);
 
   return (
     <div className="flex flex-col gap-6">

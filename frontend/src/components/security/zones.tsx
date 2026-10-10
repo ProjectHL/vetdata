@@ -28,7 +28,7 @@ import {
 import { type Doctor } from "@/domain/clinic";
 import { ownerName } from "@/domain/owners";
 import { type AccessKind, WAITING_CAPACITY } from "@/domain/security";
-import { NOW_TIME, TODAY, formatCLP, minutesSince } from "@/lib/format";
+import { formatCLP, minutesSince, useNowTime, useToday } from "@/lib/format";
 import { expectedArrivals } from "@/lib/metrics/day";
 import { useDoctorsAll, useOwners, usePatients } from "@/lib/server-state";
 import { useRetail } from "@/lib/retail-store";
@@ -58,8 +58,11 @@ export function HallZone() {
   const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
   const [kind, setKind] = useState<"all" | AccessKind>("all");
   const door = devices.find((d) => d.id === "dv-door-main")!;
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
+  const now = useNowTime();
 
-  const expected = expectedArrivals(appointments, access, waiting, rooms);
+  const expected = expectedArrivals(appointments, access, waiting, rooms, today, now);
   const log = [...access].filter((a) => kind === "all" || a.kind === kind).sort((a, b) => b.time.localeCompare(a.time));
   const inside = access.filter((a) => a.direction === "Ingreso").length - access.filter((a) => a.direction === "Salida").length;
 
@@ -193,7 +196,9 @@ export function WaitingZone() {
   const people = waiting.reduce((s, w) => s + w.people, 0);
   const pct = Math.round((people / WAITING_CAPACITY) * 100);
   const freeBoxes = rooms.filter((r) => r.kind === "box" && r.status === "disponible");
-  const avgWait = waiting.length ? Math.round(waiting.reduce((s, w) => s + minutesSince(w.arrivedAt), 0) / waiting.length) : 0;
+  // T5-5: hora real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const now = useNowTime();
+  const avgWait = waiting.length ? Math.round(waiting.reduce((s, w) => s + minutesSince(w.arrivedAt, now), 0) / waiting.length) : 0;
 
   return (
     <div className="flex flex-col gap-6">
@@ -230,7 +235,7 @@ export function WaitingZone() {
             const appt = appointments.find((a) => a.id === w.appointmentId)!;
             const p = getPatient(appt.patientId)!;
             const o = getOwner(p.ownerRut)!;
-            const minutes = minutesSince(w.arrivedAt);
+            const minutes = minutesSince(w.arrivedAt, now);
             return (
               <WaitingRow
                 key={w.id}
@@ -239,7 +244,7 @@ export function WaitingZone() {
                 patientId={p.id}
                 info={`Llegó ${w.arrivedAt} · cita ${appt.time} con ${doctorName(doctors, appt.doctorId)} · ${appt.reason}`}
                 minutes={minutes}
-                late={appt.time < NOW_TIME}
+                late={appt.time < now}
                 alert={w.alert}
                 boxes={freeBoxes.map((b) => ({ id: b.id, name: b.name }))}
                 preferredBox={appt.roomId}
@@ -372,7 +377,9 @@ export function StoreZone() {
   const { sales, products } = useRetail();
   const [clipAt, setClipAt] = useState<string | null>(null);
   const cashCam = cameras.find((c) => c.id === "c-tda-1")!;
-  const today = sales.filter((s) => s.date === TODAY && s.channel === "Mesón").sort((a, b) => b.time.localeCompare(a.time));
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const todayDate = useToday();
+  const today = sales.filter((s) => s.date === todayDate && s.channel === "Mesón").sort((a, b) => b.time.localeCompare(a.time));
   const storeEvents = events.filter((e) => e.zone === "tienda").slice(0, 5);
   const highValue = products.filter((p) => p.price > 30000);
 

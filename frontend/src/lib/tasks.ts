@@ -10,7 +10,7 @@ import { ownerName } from "@/domain/owners";
 import { INTERNAL_PHARMACY } from "@/domain/referrals";
 import { OPEN_EVENT, ZONES } from "@/domain/security";
 import type { Permission } from "@/domain/settings";
-import { TODAY, daysUntil, formatDate, formatRut } from "@/lib/format";
+import { daysUntil, formatDate, formatRut, useNowTime, useToday } from "@/lib/format";
 import { expectedArrivals } from "@/lib/metrics/day";
 import { useRetail } from "@/lib/retail-store";
 import { useSecurity } from "@/lib/security-store";
@@ -35,8 +35,8 @@ export type Task = {
   quick?: { label: string; run: () => void };
 };
 
-function ago(date: string) {
-  const d = -daysUntil(date.slice(0, 10));
+function ago(date: string, today: string) {
+  const d = -daysUntil(date.slice(0, 10), today);
   return d <= 0 ? "hoy" : d === 1 ? "ayer" : `hace ${d} d`;
 }
 
@@ -65,14 +65,18 @@ export function useTasks() {
   const security = useSecurity();
   const support = useSupport();
   const can = useCan();
+  // T5-5: fecha real del navegador tras el montaje en modo http (fijo en mock);
+  // se pasa explícita a cada regla para no tocar su lógica.
+  const today = useToday();
+  const now = useNowTime();
   const tasks: Task[] = [];
 
   // Clínica — llegadas esperadas de hoy
-  for (const a of expectedArrivals(store.appointments, security.access, security.waiting, store.rooms)) {
+  for (const a of expectedArrivals(store.appointments, security.access, security.waiting, store.rooms, today, now)) {
     const p = getPatient(a.patientId);
     if (!p) continue;
     tasks.push({
-      id: `llegada:${a.id}`, channel: "Clínica", priority: "Media", since: TODAY, permission: "agenda.gestionar",
+      id: `llegada:${a.id}`, channel: "Clínica", priority: "Media", since: today, permission: "agenda.gestionar",
       title: `Llegada de ${p.name} a las ${a.time}`,
       detail: `${ownerName(getOwner(p.ownerRut)!)} · ${a.reason}`,
       href: "/inicio/agenda",
@@ -81,8 +85,8 @@ export function useTasks() {
   }
 
   // Clínica — vacunas vencidas sin recordatorio (una tarea por mascota)
-  const visible = visiblePatients(store.grants, getCurrentClinic());
-  const overdue = dueVaccines(visible).filter((d) => d.state === "vencida");
+  const visible = visiblePatients(store.grants, getCurrentClinic(), today);
+  const overdue = dueVaccines(visible, today).filter((d) => d.state === "vencida");
   for (const pid of [...new Set(overdue.map((d) => d.patient.id))]) {
     if (store.reminders.includes(pid)) continue;
     const items = overdue.filter((d) => d.patient.id === pid);
@@ -111,7 +115,7 @@ export function useTasks() {
   // Red — solicitudes recibidas
   for (const r of store.requests.filter((r) => r.to === getCurrentClinic() && r.status === "Pendiente")) {
     tasks.push({
-      id: `solicitud:${r.id}`, channel: "Red", priority: daysUntil(r.date) <= -1 ? "Alta" : "Media", since: r.date, permission: "red.aprobar",
+      id: `solicitud:${r.id}`, channel: "Red", priority: daysUntil(r.date, today) <= -1 ? "Alta" : "Media", since: r.date, permission: "red.aprobar",
       title: `Responder solicitud de ${r.from}`,
       detail: `Acceso a ${getPatient(r.patientId)?.name} · ${r.scope}`,
       href: "/clinicas/solicitudes",
@@ -134,7 +138,7 @@ export function useTasks() {
   const onOrder = new Set(store.purchaseOrders.filter((o) => o.status !== "Recibida").flatMap((o) => o.items.map((i) => i.medicationId)));
   for (const m of store.medications.filter((m) => stockStatus(m) !== "Disponible" && !onOrder.has(m.id))) {
     tasks.push({
-      id: `stockmed:${m.id}`, channel: "Farmacia", priority: m.stock === 0 ? "Alta" : "Media", since: TODAY, permission: "farmacia.inventario",
+      id: `stockmed:${m.id}`, channel: "Farmacia", priority: m.stock === 0 ? "Alta" : "Media", since: today, permission: "farmacia.inventario",
       title: `Reponer ${m.name}`,
       detail: `Stock ${m.stock} · mínimo ${m.minStock}`,
       href: "/farmacia/proveedores",
@@ -153,7 +157,7 @@ export function useTasks() {
     const owner = getOwner(s.ownerRut);
     const next = s.status === "Por preparar" ? "Preparado" : "En ruta";
     tasks.push({
-      id: `despacho:${s.id}`, channel: "Tienda", priority: s.scheduledFor <= TODAY ? "Alta" : "Media", since: s.scheduledFor, permission: "tienda.inventario",
+      id: `despacho:${s.id}`, channel: "Tienda", priority: s.scheduledFor <= today ? "Alta" : "Media", since: s.scheduledFor, permission: "tienda.inventario",
       title: `${s.status === "Por preparar" ? "Preparar" : "Entregar al courier"} despacho de ${owner ? ownerName(owner) : ""}`,
       detail: `${s.sector} · ${s.courier} · ${formatDate(s.scheduledFor)}`,
       href: "/tienda/despachos",
@@ -163,7 +167,7 @@ export function useTasks() {
   for (const p of retail.products.filter((p) => p.stock.sala < p.shelfMin && p.stock.central > 0)) {
     const qty = Math.min(p.stock.central, p.shelfMin * 2 - p.stock.sala);
     tasks.push({
-      id: `sala:${p.id}`, channel: "Tienda", priority: p.stock.sala === 0 ? "Alta" : "Media", since: TODAY, permission: "tienda.inventario",
+      id: `sala:${p.id}`, channel: "Tienda", priority: p.stock.sala === 0 ? "Alta" : "Media", since: today, permission: "tienda.inventario",
       title: `Reponer sala: ${p.name}`, detail: `Sala ${p.stock.sala}/${p.shelfMin} · bodega ${p.stock.central} · ${p.bin}`,
       href: "/tienda/bodega",
       quick: { label: `Llevar ${qty}`, run: () => retail.transferToSala(p.id, qty) },
@@ -171,7 +175,7 @@ export function useTasks() {
   }
   for (const o of retail.orders.filter((o) => o.status === "Enviada")) {
     tasks.push({
-      id: `octda:${o.id}`, channel: "Tienda", priority: o.expected <= TODAY ? "Media" : "Baja", since: o.date, permission: "tienda.compras",
+      id: `octda:${o.id}`, channel: "Tienda", priority: o.expected <= today ? "Media" : "Baja", since: o.date, permission: "tienda.compras",
       title: `Recibir orden de tienda N° ${o.number}`, detail: `Llegada estimada ${formatDate(o.expected)}`, href: "/tienda/compras",
       quick: { label: "Recibir", run: () => retail.receiveOrder(o.id) },
     });
@@ -197,7 +201,7 @@ export function useTasks() {
   const allowed = tasks
     .filter((t) => can(t.permission))
     .sort((a, b) => PRIORITY_ORDER[a.priority] - PRIORITY_ORDER[b.priority] || a.since.localeCompare(b.since))
-    .map((t) => ({ ...t, ageLabel: ago(t.since), meta: store.taskMeta[t.id] ?? {} }));
+    .map((t) => ({ ...t, ageLabel: ago(t.since, today), meta: store.taskMeta[t.id] ?? {} }));
 
   const me = store.currentUser.name;
   const open = allowed.filter((t) => !t.meta.done);

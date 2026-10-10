@@ -3,20 +3,32 @@
 import { useEffect, useId, useState } from "react";
 import { EyeOff, Lock, VideoOff } from "lucide-react";
 import type { Camera, Scene } from "@/domain/security";
-import { NOW_TIME } from "@/lib/format";
+import { realNowTime, useNowTime } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
 export type FeedView = "live" | "recording" | "private" | "locked" | "offline";
 
-/** Reloj "en vivo": parte de NOW_TIME y avanza en el cliente (sin desajuste de hidratación). */
+/** Reloj "en vivo": parte del fijo en SSR/primer render y avanza en el cliente (sin desajuste de hidratación). */
 function useLiveClock() {
   const [seconds, setSeconds] = useState(0);
+  // T5-5: semilla fija en el primer render (idéntica al servidor); tras el
+  // montaje, en modo http, se sincroniza una sola vez con la hora real.
+  const seed = useNowTime();
+  const [base] = useState(seed);
+  const [offset, setOffset] = useState(0);
+  useEffect(() => {
+    if (process.env.NEXT_PUBLIC_DATA_SOURCE !== "http") return;
+    const [h, m] = realNowTime().split(":").map(Number);
+    const [sh, sm] = base.split(":").map(Number);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount intencional: sincroniza el reloj con la hora real sin mismatch SSR
+    setOffset(h * 3600 + m * 60 - (sh * 3600 + sm * 60));
+  }, [base]);
   useEffect(() => {
     const t = setInterval(() => setSeconds((s) => s + 1), 1000);
     return () => clearInterval(t);
   }, []);
-  const [h, m] = NOW_TIME.split(":").map(Number);
-  const total = h * 3600 + m * 60 + seconds;
+  const [h, m] = base.split(":").map(Number);
+  const total = h * 3600 + m * 60 + offset + seconds;
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${pad(Math.floor(total / 3600) % 24)}:${pad(Math.floor(total / 60) % 60)}:${pad(total % 60)}`;
 }

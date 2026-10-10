@@ -29,8 +29,21 @@ import { owners as mockOwners } from "@/mocks/owners";
 import { patients as mockPatients } from "@/mocks/patients";
 import { read } from "@/lib/server-state";
 import { dataSource, newIdempotencyKey, runInBackground, services } from "@/services";
-import { NOW_ISO, NOW_TIME } from "@/lib/format";
+import { NOW_ISO, NOW_TIME, realNowIso, realNowTime } from "@/lib/format";
 import { useStore } from "@/lib/store";
+
+/**
+ * Sellos de fecha/hora para escrituras (T5-5): en modo http el momento real del
+ * navegador (las mutaciones siempre corren post-mount: no hay riesgo de
+ * hidratación); en modo mock el fijo de la demo reproducible.
+ */
+function stampNowIso() {
+  return dataSource === "http" ? realNowIso() : NOW_ISO;
+}
+
+function stampNowTime() {
+  return dataSource === "http" ? realNowTime() : NOW_TIME;
+}
 
 type SecurityStore = {
   cameras: Camera[];
@@ -135,7 +148,7 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
       setEvents((prevList) =>
         prevList.map((e) =>
           e.id === id
-            ? { ...e, ...patch, resolvedAt: patch.status === "Resuelto" || patch.status === "Falsa alarma" ? NOW_ISO : e.resolvedAt }
+            ? { ...e, ...patch, resolvedAt: patch.status === "Resuelto" || patch.status === "Falsa alarma" ? stampNowIso() : e.resolvedAt }
             : e
         )
       );
@@ -156,7 +169,7 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
     },
     addEventNote: (id, text) => {
       const prev = events.find((e) => e.id === id);
-      setEvents((prevList) => prevList.map((e) => (e.id === id ? { ...e, notes: [...e.notes, { by: currentUser.name, at: NOW_ISO, text }] } : e)));
+      setEvents((prevList) => prevList.map((e) => (e.id === id ? { ...e, notes: [...e.notes, { by: currentUser.name, at: stampNowIso(), text }] } : e)));
       if (dataSource !== "http" || !prev) {
         runInBackground(services.security.addEventNote(id, text));
         return;
@@ -175,13 +188,13 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
     createEvent: ({ zone, cameraId, type, severity, note }) => {
       const event: SecurityEvent = {
         id: newId("ev"),
-        at: NOW_ISO,
+        at: stampNowIso(),
         zone,
         cameraId,
         type,
         severity,
         status: "Nuevo",
-        notes: note ? [{ by: currentUser.name, at: NOW_ISO, text: note }] : [],
+        notes: note ? [{ by: currentUser.name, at: stampNowIso(), text: note }] : [],
       };
       setEvents((prev) => [event, ...prev]);
       if (dataSource !== "http") {
@@ -201,7 +214,7 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
       return event;
     },
     logAudit: (cameraId, action, reason) => {
-      setAudit((prev) => [{ id: newId("au"), at: NOW_ISO, user: currentUser.name, role, action, cameraId, reason }, ...prev]);
+      setAudit((prev) => [{ id: newId("au"), at: stampNowIso(), user: currentUser.name, role, action, cameraId, reason }, ...prev]);
       // T5-4: POST /api/v1/security/audit aún NotImplemented (la auditoría la genera el
       // servidor al ejecutar cada acción); se conserva el optimista sin key ni reconcile.
       runInBackground(services.security.logAudit({ cameraId, action, reason }));
@@ -225,7 +238,7 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
       if (!appt || !patient || !owner || waiting.some((w) => w.appointmentId === appointmentId)) return;
       const accessEntry: AccessEntry = {
         id: newId("ac"),
-        time: NOW_TIME,
+        time: stampNowTime(),
         direction: "Ingreso",
         kind: "Cliente",
         who: ownerName(owner),
@@ -234,7 +247,7 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
         patientId: patient.id,
         appointmentId,
       };
-      const waitingEntry: WaitingEntry = { id: newId("w"), appointmentId, arrivedAt: NOW_TIME, people: 1 };
+      const waitingEntry: WaitingEntry = { id: newId("w"), appointmentId, arrivedAt: stampNowTime(), people: 1 };
       setAccess((prev) => [...prev, accessEntry]);
       setWaiting((prev) => [...prev, waitingEntry]);
       if (dataSource !== "http") {
@@ -263,7 +276,7 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
       if (!entry || !appt) return;
       const prevRoom = rooms.find((r) => r.id === roomId);
       // Solo estado local del mapa: el backend ocupa el box dentro de callFromWaiting.
-      updateRoom(roomId, { status: "ocupado", doctorId: appt.doctorId, patientId: appt.patientId, since: NOW_TIME }, { sync: false });
+      updateRoom(roomId, { status: "ocupado", doctorId: appt.doctorId, patientId: appt.patientId, since: stampNowTime() }, { sync: false });
       setWaiting((prev) => prev.filter((w) => w.id !== entryId));
       if (dataSource !== "http" || !prevRoom) {
         runInBackground(services.security.callFromWaiting(entryId, roomId));

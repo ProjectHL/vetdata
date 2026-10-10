@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { EXPIRY_WARNING_DAYS, type Medication, type StockStatus, expiryStatus, stockStatus } from "@/domain/medications";
 import { useStore } from "@/lib/store";
 import { AdjustStockDialog } from "./adjust-stock-dialog";
-import { formatDate } from "@/lib/format";
+import { formatDate, useToday } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/layout/empty-state";
 
@@ -49,6 +49,7 @@ export function MedicationTable() {
   const [onlyLow, setOnlyLow] = useState(false);
   const [adjusting, setAdjusting] = useState<Medication | null>(null);
   const { medications } = useStore();
+  const today = useToday();
   const categories = [...new Set(medications.map((m) => m.category))].sort();
   const kpis = [
     { label: "Productos en catálogo", icon: Pill, value: medications.length, tone: "text-primary" },
@@ -61,7 +62,7 @@ export function MedicationTable() {
     {
       label: `Por vencer (≤ ${EXPIRY_WARNING_DAYS} días)`,
       icon: CalendarClock,
-      value: medications.filter((m) => expiryStatus(m) !== "ok").length,
+      value: medications.filter((m) => expiryStatus(m, today) !== "ok").length,
       tone: "text-orange-600 dark:text-orange-400",
     },
     {
@@ -144,7 +145,7 @@ export function MedicationTable() {
               {rows.map((m) => {
                 const status = stockStatus(m);
                 const StockIcon = stockIcon[status];
-                const expiry = expiryStatus(m);
+                const expiry = expiryStatus(m, today);
                 // La barra llena = el doble del mínimo; bajo el mínimo queda bajo la mitad.
                 const pct = Math.min(100, (m.stock / (m.minStock * 2)) * 100);
                 return (

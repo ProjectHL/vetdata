@@ -11,16 +11,17 @@ export function todayAppointments(appointments: Appointment[], date = TODAY) {
 
 /**
  * Etapa real de una cita cruzando agenda, sala de espera (Seguridad) y mapa de boxes (Actividad).
+ * Lógica intacta (T5-5): `today`/`now` solo permiten evaluar con fecha real en modo http.
  */
-export function appointmentStage(appt: Appointment, waiting: WaitingEntry[], rooms: Room[]): AppointmentStage {
+export function appointmentStage(appt: Appointment, waiting: WaitingEntry[], rooms: Room[], today = TODAY, now = NOW_TIME): AppointmentStage {
   if (appt.status === "Cancelada") return "Cancelada";
   if (appt.status === "No asistió") return "No asistió";
   if (appt.status === "Realizada") return "Realizada";
   if (waiting.some((w) => w.appointmentId === appt.id)) return "En espera";
   // En box: el paciente ocupa un box ahora y la cita es de la próxima hora (no una cita posterior del mismo día).
   if (
-    appt.date === TODAY &&
-    -minutesSince(appt.time, NOW_TIME) <= 60 &&
+    appt.date === today &&
+    -minutesSince(appt.time, now) <= 60 &&
     rooms.some((r) => r.status === "ocupado" && r.patientId === appt.patientId)
   )
     return "En box";
@@ -28,13 +29,13 @@ export function appointmentStage(appt: Appointment, waiting: WaitingEntry[], roo
 }
 
 /** Citas de hoy activas que aún no registran ingreso en el hall ni están en la sala de espera. */
-export function expectedArrivals(appointments: Appointment[], access: AccessEntry[], waiting: WaitingEntry[], rooms: Room[]) {
+export function expectedArrivals(appointments: Appointment[], access: AccessEntry[], waiting: WaitingEntry[], rooms: Room[], today = TODAY, now = NOW_TIME) {
   const arrived = new Set([...access.map((a) => a.appointmentId), ...waiting.map((w) => w.appointmentId)].filter(Boolean));
-  return todayAppointments(appointments).filter(
+  return todayAppointments(appointments, today).filter(
     (a) =>
       (a.status === "Agendada" || a.status === "Confirmada") &&
       !arrived.has(a.id) &&
-      appointmentStage(a, waiting, rooms) === "Por llegar"
+      appointmentStage(a, waiting, rooms, today, now) === "Por llegar"
   );
 }
 

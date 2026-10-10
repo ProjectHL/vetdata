@@ -18,7 +18,7 @@ El frontend no tiene runner de tests (`dev/build/start/lint` solamente). No hay 
 - [x] T5-2 Hidratar 4 stores (`store`, `retail-store`, `security-store`, `support-store`) con loading/error desde `http` en vez de semilla en memoria
 - [x] T5-3 Matar `lib/lookups.ts`: migrar 75 archivos consumidores + `tasks.ts` + `analytics/metrics` a estado servidor (T5-3a: nivel `lib` via registry; T5-3b: retail/farmacia/agenda/care-actions; T5-3c: analytics/dashboard/search/activity + hooks vivos; T5-3d: sharing/network/owners/pets/patients; T5-3e: security/support/app/topbar + `nvr.ts` local; T5-3f: últimos 9 de `lib/*` + borrado de `lookups.ts`; T5-3g: 16 comentarios mocks + resto en `nvr.ts`; `grep lookups src/` vacío, `tsc`+`lint` limpios)
 - [x] T5-4 Reconciliar ids optimistas (`-new-N` → canónico), revertir/avisar en error, `Idempotency-Key` desde UI
-- [ ] T5-5 Fechas reales sin romper hidratación, `currentClinic/currentUser/role` desde sesión
+- [x] T5-5 Fechas reales sin romper hidratación, `currentClinic/currentUser/role` desde sesión (sesión vía `GET /me` con fallback semilla + guardia anti-`Ver como`; fechas con hooks post-mount SSR-safe + threading en todos los llamadores incl. `expiryStatus(m, today)`; `lint`+`tsc` limpios)
 - [ ] T5-6 Salida fase: con `NEXT_PUBLIC_DATA_SOURCE=http`, recargar no pierde nada
 
 ## Progreso
@@ -32,3 +32,4 @@ El frontend no tiene runner de tests (`dev/build/start/lint` solamente). No hay 
 - 2026-10-10: T5-3d cerrada — 12 archivos (sharing/network/owners/pets/patients) sin `lookups` ni `@/mocks`, finders como closures sobre hooks; cada subcomponente se suscribe con su propio hook.
 - 2026-10-10: T5-3e/f/g cerradas — últimos 11 (security/support/app/topbar, 4 pages server→client) + 9 de `lib/*` via `read()` + `lookups.ts` borrado + 16 comentarios mocks + resto `nvr.ts`; `grep -rn lookups src/` vacío; `tsc`+`lint` limpios. Deuda: `billableServices` y `NVR` siguen semilla (sin endpoint).
 - 2026-10-10: T5-4 cerrada — `apiFetch` envía `Idempotency-Key` (cola FIFO un solo uso, GET nunca consume), stores reconcilian canónico y revierten al fallar con error en el store; `mock` intacto; `lint`+`tsc` limpios. Diseño documentado: key viaja store→cola→apiFetch porque las firmas del contrato no la aceptan.
+- 2026-10-10: T5-5 cerrada — `currentUser` de `GET /me`, `role` inicial del membership (guardia anti-retry), fechas reales con hooks SSR-safe (`useToday/useNowTime/useNowIso`, `stampToday()` en escrituras), threading completo de llamadores (T5-5b/c/d + fix `expiryStatus` inline); `mock` idéntico; `lint`+`tsc` limpios. Nota: `slaState` exige ISO (`useNowIso`, no `useNowTime`).

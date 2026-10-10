@@ -37,7 +37,7 @@ import {
   useMonthlyConsults,
   useNetworkAlerts,
 } from "@/lib/server-state";
-import { formatDate } from "@/lib/format";
+import { formatDate, useToday } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { ExportButton, NetworkTag, clinicVsNetwork } from "./shared";
@@ -54,8 +54,10 @@ export function Diagnoses() {
   const networkAlerts = useNetworkAlerts();
   const [period, setPeriod] = useState<keyof typeof PERIODS>("12");
   const [category, setCategory] = useState(diagnosisCategories[0].category);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
   const trend = monthlyConsults.slice(-Number(period));
-  const mine = visiblePatients(grants, currentClinic);
+  const mine = visiblePatients(grants, currentClinic, today);
   const matches = patientsWithCategory(mine, category);
 
   return (

@@ -20,8 +20,8 @@ export type MedicationTurnover = {
 };
 
 /** Rotación y cobertura con las salidas (dispensación + venta) de los últimos 30 días. */
-export function medicationTurnover(medications: Medication[], movements: StockMovement[]): MedicationTurnover[] {
-  const from = addDays(TODAY, -30);
+export function medicationTurnover(medications: Medication[], movements: StockMovement[], today = TODAY): MedicationTurnover[] {
+  const from = addDays(today, -30);
   return medications
     .map((medication) => {
       const out30 = movements
@@ -39,10 +39,10 @@ export function medicationTurnover(medications: Medication[], movements: StockMo
 }
 
 /** Medicamentos que vencen en ≤ 60 días, valorizados a costo. */
-export function expiringValue(medications: Medication[]) {
+export function expiringValue(medications: Medication[], today = TODAY) {
   const list = medications
     .filter((m) => expiryStatus(m) !== "ok" && m.stock > 0)
-    .map((m) => ({ medication: m, days: daysUntil(m.expiry), value: m.stock * Math.round(m.price * COST_RATIO) }))
+    .map((m) => ({ medication: m, days: daysUntil(m.expiry, today), value: m.stock * Math.round(m.price * COST_RATIO) }))
     .sort((a, b) => a.days - b.days);
   return { list, total: list.reduce((s, x) => s + x.value, 0) };
 }

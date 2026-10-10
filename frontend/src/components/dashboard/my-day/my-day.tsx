@@ -6,7 +6,7 @@ import { CalendarDays, Cctv, Gauge, ListChecks, Pill, Search, ShoppingCart, Truc
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Role } from "@/domain/settings";
-import { NOW_TIME, TODAY, formatDate } from "@/lib/format";
+import { formatDate, useNowTime, useToday } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { AdminDay } from "./admin";
 import { PharmacyDay } from "./pharmacy";
@@ -38,14 +38,17 @@ const QUICK: Record<Role, { label: string; href: string; icon: React.ComponentTy
 
 export function MyDay() {
   const { currentUser, role } = useStore();
-  const greeting = NOW_TIME < "12:00" ? "Buenos días" : NOW_TIME < "20:00" ? "Buenas tardes" : "Buenas noches";
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR, sin mismatch).
+  const today = useToday();
+  const now = useNowTime();
+  const greeting = now < "12:00" ? "Buenos días" : now < "20:00" ? "Buenas tardes" : "Buenas noches";
   const firstName = currentUser.name.replace(/^(Dra?\.)\s/, "").split(" ")[0];
 
   return (
     <PageContainer>
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <p className="text-sm text-muted-foreground">{formatDate(TODAY)} · {NOW_TIME} h</p>
+          <p className="text-sm text-muted-foreground">{formatDate(today)} · {now} h</p>
           <h1 className="flex flex-wrap items-center gap-2 text-2xl font-semibold tracking-tight">
             {greeting}, {firstName} <Badge variant="secondary">{role}</Badge>
           </h1>

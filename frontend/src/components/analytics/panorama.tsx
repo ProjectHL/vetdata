@@ -31,7 +31,7 @@ import { useCurrentClinic, useRevenueByLine as useRevenueByLineLive } from "@/li
 import { SERVICES_MARGIN } from "@/domain/metrics";
 import { COST_RATIO } from "@/domain/pharmacy";
 import { grantStatus } from "@/domain/sharing";
-import { formatCLP } from "@/lib/format";
+import { formatCLP, useToday } from "@/lib/format";
 import { consultsThisMonth, vaccineKpis } from "@/lib/metrics/clinic";
 import { pharmacyKpis } from "@/lib/metrics/pharmacy";
 import { marginByCategory, productTurnover, retailKpis, retailMonthNet, shipmentKpis } from "@/lib/metrics/retail";
@@ -56,8 +56,10 @@ const millions = (n: number) => `$${(n / 1_000_000).toLocaleString("es-CL", { ma
 function useRevenueByLine() {
   const { sales } = useRetail();
   const base = useRevenueByLineLive();
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR).
+  const today = useToday();
   const series = base.map((m) => ({ ...m }));
-  series[series.length - 1].tienda = retailMonthNet(sales);
+  series[series.length - 1].tienda = retailMonthNet(sales, today);
   return series;
 }
 
@@ -67,22 +69,24 @@ export function Panorama() {
   const { tickets } = useSupport();
   const security = useSecurity();
   const currentClinic = useCurrentClinic();
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR).
+  const today = useToday();
   const camsOnline = security.cameras.filter((c) => c.status === "En línea").length;
   const openEvents = security.events.filter((e) => OPEN_EVENT.includes(e.status));
   const criticalNew = openEvents.filter((e) => e.severity === "Crítica" && e.status === "Nuevo").length;
   const series = useRevenueByLine();
 
-  const visible = visiblePatients(grants, currentClinic);
-  const vax = vaccineKpis(visible);
+  const visible = visiblePatients(grants, currentClinic, today);
+  const vax = vaccineKpis(visible, today);
   const consults = consultsThisMonth();
   const pharma = pharmacyKpis(medications, referrals);
-  const retail = retailKpis(sales, products);
+  const retail = retailKpis(sales, products, today);
   const retailMargin = marginByCategory(sales, products);
   const breakSoon = productTurnover(sales, products).filter((t) => t.coverageDays !== null && t.coverageDays < 7).length;
-  const ship = shipmentKpis(shipments);
+  const ship = shipmentKpis(shipments, today);
   const support = supportKpis(tickets);
   const pendingRequests = requests.filter((r) => r.to === currentClinic && r.status === "Pendiente").length;
-  const activeGrants = grants.filter((g) => grantStatus(g) === "Vigente").length;
+  const activeGrants = grants.filter((g) => grantStatus(g, today) === "Vigente").length;
 
   const sept = series[series.length - 2];
   const aug = series[series.length - 3];

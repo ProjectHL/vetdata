@@ -29,7 +29,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { type Appointment, SLOTS } from "@/domain/appointments";
 import { ownerName } from "@/domain/owners";
-import { NOW_TIME, TODAY, addDays, formatDate, formatRut, minutesSince } from "@/lib/format";
+import { TODAY, addDays, formatDate, formatRut, minutesSince, useNowTime, useToday } from "@/lib/format";
 import { type AppointmentStage, appointmentStage, stageStyle } from "@/lib/metrics/day";
 import { useSecurity } from "@/lib/security-store";
 import { useDoctorsAll, useOwners, usePatients } from "@/lib/server-state";
@@ -43,12 +43,17 @@ const ROW = 56; // alto de cada bloque de 30 min (px)
 function useStage() {
   const { rooms } = useStore();
   const { waiting } = useSecurity();
-  return (a: Appointment) => appointmentStage(a, waiting, rooms);
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR); se pasa
+  // explícita para no tocar la lógica de `appointmentStage`.
+  const today = useToday();
+  const now = useNowTime();
+  return (a: Appointment) => appointmentStage(a, waiting, rooms, today, now);
 }
 
 export function Agenda() {
   const { appointments } = useStore();
   const doctors = useDoctors();
+  const today = useToday();
   const [date, setDate] = useState(TODAY);
   const [mode, setMode] = useState<"day" | "week">("day");
   const [doctorFilter, setDoctorFilter] = useState("all");
@@ -59,7 +64,7 @@ export function Agenda() {
   const monday = addDays(date, -((weekday(date) + 6) % 7));
   const label =
     mode === "day"
-      ? `${WEEKDAYS[weekday(date)]} ${formatDate(date)}${date === TODAY ? " · hoy" : ""}`
+      ? `${WEEKDAYS[weekday(date)]} ${formatDate(date)}${date === today ? " · hoy" : ""}`
       : `Semana del ${formatDate(monday)} al ${formatDate(addDays(monday, 6))}`;
   const selectedAppt = appointments.find((a) => a.id === selected);
 
@@ -68,7 +73,7 @@ export function Agenda() {
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex items-center gap-1">
           <Button size="icon" variant="outline" aria-label="Anterior" onClick={() => setDate(addDays(date, -step))}><ChevronLeft /></Button>
-          <Button variant="outline" onClick={() => setDate(TODAY)}>Hoy</Button>
+          <Button variant="outline" onClick={() => setDate(today)}>Hoy</Button>
           <Button size="icon" variant="outline" aria-label="Siguiente" onClick={() => setDate(addDays(date, step))}><ChevronRight /></Button>
         </div>
         <span className="font-medium">{label}</span>
@@ -140,9 +145,11 @@ function DayView({
   const can = useCan();
   const stage = useStage();
   const patients = usePatients();
+  const today = useToday();
+  const now = useNowTime();
   const dayAppts = appointments.filter((a) => a.date === date);
-  const nowOffset = (minutesSince("09:00", NOW_TIME) / 30) * ROW;
-  const showNow = date === TODAY && nowOffset >= 0 && nowOffset <= SLOTS.length * ROW;
+  const nowOffset = (minutesSince("09:00", now) / 30) * ROW;
+  const showNow = date === today && nowOffset >= 0 && nowOffset <= SLOTS.length * ROW;
 
   return (
     <Card className="overflow-hidden py-0">
@@ -164,7 +171,7 @@ function DayView({
                 className="absolute right-1 z-20 -translate-y-1/2 rounded bg-primary px-1 text-[10px] font-medium text-primary-foreground tabular-nums"
                 style={{ top: nowOffset }}
               >
-                {NOW_TIME}
+                {now}
               </span>
             )}
             {SLOTS.map((t) => (
@@ -178,7 +185,7 @@ function DayView({
               {showNow && <div className="pointer-events-none absolute inset-x-0 z-10 border-t-2 border-primary" style={{ top: nowOffset }} />}
               {SLOTS.map((t) => {
                 const appt = dayAppts.find((a) => a.doctorId === d.id && a.time === t);
-                const past = date < TODAY || (date === TODAY && minutesSince(t, NOW_TIME) >= 30);
+                const past = date < today || (date === today && minutesSince(t, now) >= 30);
                 if (appt) {
                   const s = stage(appt);
                     const p = patients.find((x) => x.id === appt.patientId);
@@ -238,6 +245,7 @@ function WeekView({
   const patients = usePatients();
   const allDoctors = useDoctorsAll();
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
+  const today = useToday();
 
   return (
     <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
@@ -246,7 +254,7 @@ function WeekView({
           .filter((a) => a.date === d && (doctorId === "all" || a.doctorId === doctorId))
           .sort((a, b) => a.time.localeCompare(b.time));
         return (
-          <Card key={d} className={cn("gap-2 py-3", d === TODAY && "ring-2 ring-primary")}>
+          <Card key={d} className={cn("gap-2 py-3", d === today && "ring-2 ring-primary")}>
             <CardContent className="flex flex-col gap-2 px-3">
               <button type="button" onClick={() => onDay(d)} className="flex items-baseline justify-between text-left hover:text-primary">
                 <span className="font-semibold">{WEEKDAYS[weekday(d)]} {d.slice(8)}</span>
@@ -285,6 +293,8 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
   const allDoctors = useDoctorsAll();
   const [resched, setResched] = useState<{ date: string; time: string; doctorId: string } | null>(null);
   const [box, setBox] = useState("");
+  const today = useToday();
+  const now = useNowTime();
 
   const p = a ? patients.find((x) => x.id === a.patientId) : undefined;
   const owner = p ? owners.find((o) => o.rut === p.ownerRut) : undefined;
@@ -324,7 +334,7 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
               )}
               {wait && (
                 <p className="rounded-lg bg-amber-50 p-2 text-xs dark:bg-amber-950/40">
-                  En sala de espera desde las {wait.arrivedAt} ({minutesSince(wait.arrivedAt)} min).{wait.alert && ` ${wait.alert}`}
+                   En sala de espera desde las {wait.arrivedAt} ({minutesSince(wait.arrivedAt, now)} min).{wait.alert && ` ${wait.alert}`}
                 </p>
               )}
               {p.allergies.length > 0 && <p className="text-xs text-destructive">Alergias: {p.allergies.join(", ")}</p>}
@@ -334,7 +344,7 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
                   {active && a.status === "Agendada" && (
                     <Button variant="outline" onClick={() => updateAppointment(a.id, { status: "Confirmada" })}><CalendarCheck /> Confirmar</Button>
                   )}
-                  {active && s === "Por llegar" && a.date === TODAY && (
+                  {active && s === "Por llegar" && a.date === today && (
                     <Button onClick={() => checkIn(a.id)}><LogIn /> Registrar llegada</Button>
                   )}
                   {wait && (
@@ -364,7 +374,7 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
                         <div className="flex flex-col gap-2 rounded-lg border p-3">
                           <div className="grid grid-cols-2 gap-2">
                             <Field label="Fecha" htmlFor="rs-date">
-                              <Input id="rs-date" type="date" min={TODAY} value={resched.date} onChange={(e) => setResched({ ...resched, date: e.target.value })} />
+                              <Input id="rs-date" type="date" min={today} value={resched.date} onChange={(e) => setResched({ ...resched, date: e.target.value })} />
                             </Field>
                             <Field label="Hora">
                               <Select value={resched.time} onValueChange={(v) => setResched({ ...resched, time: v })}>

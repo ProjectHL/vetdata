@@ -31,7 +31,7 @@ import {
 } from "@/lib/server-state";
 import { COST_RATIO } from "@/domain/pharmacy";
 import { grantStatus } from "@/domain/sharing";
-import { formatCLP, formatDate } from "@/lib/format";
+import { formatCLP, formatDate, useNowTime, useToday } from "@/lib/format";
 import { agendaLoad, appointmentRates } from "@/lib/metrics/clinic";
 import { expiringValue, medicationTurnover } from "@/lib/metrics/pharmacy";
 import { useDoctors, useStore } from "@/lib/store";
@@ -161,8 +161,11 @@ function Operations() {
     .map(([doctor, value]) => ({ doctor: doctor.replace(/^(Dra?\.)\s/, ""), value }))
     .sort((a, b) => b.value - a.value);
   const doctors = useDoctors();
-  const rates = appointmentRates(appointments);
-  const load = agendaLoad(appointments, doctors);
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR).
+  const today = useToday();
+  const now = useNowTime();
+  const rates = appointmentRates(appointments, today);
+  const load = agendaLoad(appointments, doctors, 7, today, now);
 
   return (
     <div className="flex flex-col gap-4">
@@ -272,6 +275,8 @@ function Operations() {
 
 function PharmacyReport() {
   const { movements, medications } = useStore();
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR).
+  const today = useToday();
   const out = movements.filter((m) => m.type === "Salida");
   const top = Object.entries(out.reduce<Record<string, number>>((acc, m) => ({ ...acc, [m.medicationId]: (acc[m.medicationId] ?? 0) - m.qty }), {}))
     .map(([id, value]) => ({ name: medications.find((m) => m.id === id)?.name ?? id, value }))
@@ -280,8 +285,8 @@ function PharmacyReport() {
   const losses = movements.filter((m) => m.type === "Ajuste");
   const lossValue = losses.reduce((s, m) => s - m.qty * Math.round((medications.find((x) => x.id === m.medicationId)?.price ?? 0) * COST_RATIO), 0);
   const inventoryValue = medications.reduce((s, m) => s + m.stock * Math.round(m.price * COST_RATIO), 0);
-  const turnover = medicationTurnover(medications, movements).filter((t) => t.out30 > 0);
-  const expiring = expiringValue(medications);
+  const turnover = medicationTurnover(medications, movements, today).filter((t) => t.out30 > 0);
+  const expiring = expiringValue(medications, today);
 
   return (
     <div className="flex flex-col gap-4">
@@ -396,6 +401,8 @@ function PharmacyReport() {
 function NetworkReport() {
   const { requests, grants } = useStore();
   const currentClinic = useCurrentClinic();
+  // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR).
+  const today = useToday();
   const sent = requests.filter((r) => r.from === currentClinic);
   const received = requests.filter((r) => r.to === currentClinic);
   const answered = received.filter((r) => r.respondedAt);
@@ -403,7 +410,7 @@ function NetworkReport() {
   const avgResponse = answered.length
     ? (answered.reduce((s, r) => s + (Date.parse(r.respondedAt!) - Date.parse(r.date)) / 86_400_000, 0) / answered.length).toFixed(1)
     : "—";
-  const active = grants.filter((g) => grantStatus(g) === "Vigente");
+  const active = grants.filter((g) => grantStatus(g, today) === "Vigente");
   const rows = [
     { metric: "Solicitudes enviadas", value: sent.length, detail: `${sent.filter((r) => r.status === "Pendiente").length} pendientes` },
     { metric: "Solicitudes recibidas", value: received.length, detail: `${received.filter((r) => r.status === "Pendiente").length} pendientes` },

@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/dialog";
 import { ownerName } from "@/domain/owners";
 import { type Patient, lastVisit, patientAge } from "@/domain/patients";
-import { TODAY, formatDate, formatRut } from "@/lib/format";
+import { formatDate, formatRut, useToday } from "@/lib/format";
 import { useDoctorsAll, useOwners } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { Guard } from "@/components/settings/guard";
@@ -42,8 +42,10 @@ const titles: Record<Exclude<CareView, "summary">, string> = {
 
 export function useNextAppointment(patientId: string) {
   const { appointments } = useStore();
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
   return appointments
-    .filter((a) => a.patientId === patientId && a.date >= TODAY && (a.status === "Agendada" || a.status === "Confirmada"))
+    .filter((a) => a.patientId === patientId && a.date >= today && (a.status === "Agendada" || a.status === "Confirmada"))
     .sort((a, b) => (a.date + a.time).localeCompare(b.date + b.time))[0];
 }
 

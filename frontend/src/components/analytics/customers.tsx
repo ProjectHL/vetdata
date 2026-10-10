@@ -17,7 +17,7 @@ import {
 import { visiblePatients } from "@/lib/analytics";
 import { useCurrentClinic } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
-import { formatCLP, formatRut } from "@/lib/format";
+import { formatCLP, formatRut, useToday } from "@/lib/format";
 import {
   customerSpend,
   omnichannel,
@@ -37,7 +37,9 @@ export function Customers() {
   const { grants, invoices } = useStore();
   const { sales } = useRetail();
   const currentClinic = useCurrentClinic();
-  const visible = visiblePatients(grants, currentClinic);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
+  const visible = visiblePatients(grants, currentClinic, today);
   const kpis = patientKpis(visible);
   const species = speciesDistribution(visible);
   const perOwner = petsPerOwner(visible);

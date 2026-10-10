@@ -15,8 +15,8 @@ export function consultsThisMonth() {
   return { value: cur.clinica, previous: prev.clinica };
 }
 
-export function vaccineKpis(visible: Patient[]) {
-  const due = dueVaccines(visible);
+export function vaccineKpis(visible: Patient[], today = TODAY) {
+  const due = dueVaccines(visible, today);
   return {
     coverage: coverage(visible),
     networkCoverage: coverage(read("patients", mockPatients)),
@@ -29,11 +29,11 @@ export function vaccineKpis(visible: Patient[]) {
 const ACTIVE = (a: Appointment) => a.status === "Agendada" || a.status === "Confirmada";
 
 /** Tasas sobre las citas ya ocurridas (realizadas, canceladas o no asistidas). */
-export function appointmentRates(appointments: Appointment[]) {
+export function appointmentRates(appointments: Appointment[], today = TODAY) {
   const past = appointments.filter((a) => a.status === "Realizada" || a.status === "Cancelada" || a.status === "No asistió");
   const pct = (n: number) => Math.round((n / Math.max(1, past.length)) * 100);
   return {
-    upcoming: appointments.filter((a) => a.date >= TODAY && ACTIVE(a)).length,
+    upcoming: appointments.filter((a) => a.date >= today && ACTIVE(a)).length,
     done: past.filter((a) => a.status === "Realizada").length,
     cancelPct: pct(past.filter((a) => a.status === "Cancelada").length),
     noShowPct: pct(past.filter((a) => a.status === "No asistió").length),
@@ -41,14 +41,14 @@ export function appointmentRates(appointments: Appointment[]) {
 }
 
 /** Carga de agenda de los próximos 7 días por profesional y su próxima hora libre. */
-export function agendaLoad(appointments: Appointment[], doctors: Doctor[], days = 7) {
-  const range = Array.from({ length: days }, (_, i) => addDays(TODAY, i));
+export function agendaLoad(appointments: Appointment[], doctors: Doctor[], days = 7, today = TODAY, now = NOW_TIME) {
+  const range = Array.from({ length: days }, (_, i) => addDays(today, i));
   return doctors.map((doctor) => {
     const mine = appointments.filter((a) => a.doctorId === doctor.id && ACTIVE(a) && range.includes(a.date));
     const taken = new Set(mine.map((a) => `${a.date} ${a.time}`));
     let nextFree: { date: string; time: string } | null = null;
     for (const date of range) {
-      const time = SLOTS.find((t) => !taken.has(`${date} ${t}`) && (date > TODAY || t > NOW_TIME));
+      const time = SLOTS.find((t) => !taken.has(`${date} ${t}`) && (date > today || t > now));
       if (time) {
         nextFree = { date, time };
         break;

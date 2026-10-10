@@ -16,7 +16,7 @@ import { visiblePatients } from "@/lib/analytics";
 import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { ownerName } from "@/domain/owners";
 import { lastVisit } from "@/domain/patients";
-import { formatCLP, formatDate } from "@/lib/format";
+import { formatCLP, formatDate, useToday } from "@/lib/format";
 import { consultsThisMonth, vaccineKpis } from "@/lib/metrics/clinic";
 import { speciesDistribution } from "@/lib/metrics/customers";
 import { retailKpis } from "@/lib/metrics/retail";
@@ -32,11 +32,13 @@ export function AdminDay() {
   const owners = useOwners();
   const getPatient = (id: string) => patients.find((p) => p.id === id);
   const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
-  const visible = visiblePatients(grants, currentClinic);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
+  const visible = visiblePatients(grants, currentClinic, today);
   const own = visible.filter((p) => p.clinic === currentClinic).length;
   const consults = consultsThisMonth();
-  const vax = vaccineKpis(visible);
-  const retail = retailKpis(sales, products);
+  const vax = vaccineKpis(visible, today);
+  const retail = retailKpis(sales, products, today);
   const species = speciesDistribution(visible);
   const recent = [...visible].sort((a, b) => lastVisit(b).localeCompare(lastVisit(a))).slice(0, 6);
 

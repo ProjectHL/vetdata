@@ -41,13 +41,14 @@ export type Ticket = {
 
 export type SlaState = "En plazo" | "En riesgo" | "Vencido" | "Cumplido" | "Incumplido";
 
-export function slaState(t: Ticket): { state: SlaState; hoursLeft: number } {
+/** Lógica intacta (T5-5): `now` solo permite evaluar con el momento real en modo http; por defecto es el fijo. */
+export function slaState(t: Ticket, now = NOW_ISO): { state: SlaState; hoursLeft: number } {
   const limit = SLA_HOURS[t.priority];
   if (t.firstResponseAt) {
     const took = hoursBetween(t.createdAt, t.firstResponseAt);
     return { state: took <= limit ? "Cumplido" : "Incumplido", hoursLeft: limit - took };
   }
-  const left = limit - hoursBetween(t.createdAt, NOW_ISO);
+  const left = limit - hoursBetween(t.createdAt, now);
   if (left < 0) return { state: "Vencido", hoursLeft: left };
   if (left < limit * 0.25) return { state: "En riesgo", hoursLeft: left };
   return { state: "En plazo", hoursLeft: left };

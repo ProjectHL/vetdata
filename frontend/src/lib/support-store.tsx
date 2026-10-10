@@ -6,8 +6,17 @@ import { seedIdeas, seedTickets, releases as mockReleases } from "@/mocks/suppor
 import { currentClinic as mockCurrentClinic } from "@/mocks/network";
 import { publish, read, readScalar } from "@/lib/server-state";
 import { dataSource, newIdempotencyKey, runInBackground, services } from "@/services";
-import { NOW_ISO } from "@/lib/format";
+import { NOW_ISO, realNowIso } from "@/lib/format";
 import { useStore } from "@/lib/store";
+
+/**
+ * Sello de momento para escrituras (T5-5): en modo http el momento real del
+ * navegador (las mutaciones siempre corren post-mount: no hay riesgo de
+ * hidratación); en modo mock el fijo de la demo reproducible.
+ */
+function stampNowIso() {
+  return dataSource === "http" ? realNowIso() : NOW_ISO;
+}
 
 type NewTicket = { title: string; category: TicketCategory; priority: TicketPriority; module: string; body: string; route: string };
 
@@ -104,8 +113,8 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
       module,
       status: "Nuevo",
       createdBy: currentUser.name,
-      createdAt: NOW_ISO,
-      messages: [{ author: currentUser.name, side: "Clínica", body, at: NOW_ISO }],
+      createdAt: stampNowIso(),
+      messages: [{ author: currentUser.name, side: "Clínica", body, at: stampNowIso() }],
       context: { route, role },
       ideaId,
     };
@@ -140,7 +149,7 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
         ...t,
         // Si soporte esperaba al cliente, la respuesta lo devuelve a "En progreso".
         status: t.status === "Esperando cliente" ? "En progreso" : t.status,
-        messages: [...t.messages, { author: currentUser.name, side: "Clínica", body, at: NOW_ISO }],
+        messages: [...t.messages, { author: currentUser.name, side: "Clínica", body, at: stampNowIso() }],
       }));
       if (dataSource !== "http" || !prev) {
         runInBackground(services.support.reply(id, body));
@@ -198,11 +207,11 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
     simulateSupportReply: (id) =>
       update(id, (t) => ({
         ...t,
-        firstResponseAt: t.firstResponseAt ?? NOW_ISO,
+        firstResponseAt: t.firstResponseAt ?? stampNowIso(),
         status: t.status === "Nuevo" ? "En revisión" : t.status === "En revisión" ? "En progreso" : t.status,
         messages: [
           ...t.messages,
-          { author: "Soporte VetData · Ignacia", side: "VetData", body: REPLIES[t.messages.length % REPLIES.length], at: NOW_ISO },
+          { author: "Soporte VetData · Ignacia", side: "VetData", body: REPLIES[t.messages.length % REPLIES.length], at: stampNowIso() },
         ],
       })),
     voteIdea: (id) => {

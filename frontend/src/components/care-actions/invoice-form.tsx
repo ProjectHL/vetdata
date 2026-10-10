@@ -25,7 +25,7 @@ import type { Invoice, InvoiceItem } from "@/domain/invoices";
 import { ownerName } from "@/domain/owners";
 import type { Patient } from "@/domain/patients";
 import { IVA_RATE } from "@/domain/services";
-import { TODAY, formatCLP, formatDate, formatRut } from "@/lib/format";
+import { formatCLP, formatDate, formatRut, useToday } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { useBillableServices, useOwners } from "@/lib/server-state";
 import { SuccessPanel } from "./field";
@@ -50,6 +50,8 @@ export function InvoiceForm({ patient, onDone }: { patient: Patient; onDone: () 
   ]);
   const [picker, setPicker] = useState("");
   const [created, setCreated] = useState<Invoice | null>(null);
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
 
   const addItem = (value: string) => {
     const [kind, id] = value.split(":");
@@ -94,7 +96,7 @@ export function InvoiceForm({ patient, onDone }: { patient: Patient; onDone: () 
         <div>
           <span className="text-xs text-muted-foreground">Paciente · Fecha</span>
           <p className="font-medium">{patient.name}</p>
-          <p className="text-xs text-muted-foreground">{formatDate(TODAY)}</p>
+          <p className="text-xs text-muted-foreground">{formatDate(today)}</p>
         </div>
       </div>
 
@@ -173,7 +175,7 @@ export function InvoiceForm({ patient, onDone }: { patient: Patient; onDone: () 
               addInvoice({
                 patientId: patient.id,
                 ownerRut: owner.rut,
-                date: TODAY,
+                date: today,
                 items: rows.map(({ description, qty, unitPrice, medicationId }) => ({ description, qty, unitPrice, medicationId })),
                 net,
                 iva,

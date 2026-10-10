@@ -68,11 +68,12 @@ export type AccessLevel = "propio" | "compartido" | "ninguno";
 export function accessLevel(
   patient: Pick<Patient, "id" | "clinic">,
   grants: AccessGrant[],
-  clinic: string
+  clinic: string,
+  today = TODAY
 ): { level: AccessLevel; grant?: AccessGrant } {
   if (patient.clinic === clinic) return { level: "propio" };
   const grant = grants.find(
-    (g) => g.patientId === patient.id && g.grantedTo === clinic && grantStatus(g) === "Vigente"
+    (g) => g.patientId === patient.id && g.grantedTo === clinic && grantStatus(g, today) === "Vigente"
   );
   return grant ? { level: "compartido", grant } : { level: "ninguno" };
 }

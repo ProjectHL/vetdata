@@ -25,8 +25,21 @@ import {
 import { owners as mockOwners } from "@/mocks/owners";
 import { publish, read } from "@/lib/server-state";
 import { dataSource, newIdempotencyKey, runInBackground, services } from "@/services";
-import { NOW_TIME, TODAY, addDays } from "@/lib/format";
+import { NOW_TIME, TODAY, addDays, realNowTime, realToday } from "@/lib/format";
 import { useStore } from "@/lib/store";
+
+/**
+ * Sellos de fecha/hora para escrituras (T5-5): en modo http la fecha real del
+ * navegador (las mutaciones siempre corren post-mount: no hay riesgo de
+ * hidratación); en modo mock el fijo de la demo reproducible.
+ */
+function stampToday() {
+  return dataSource === "http" ? realToday() : TODAY;
+}
+
+function stampNowTime() {
+  return dataSource === "http" ? realNowTime() : NOW_TIME;
+}
 
 /**
  * Estado de sesión de la Tienda: inventario por ubicación, ventas, compras y despachos.
@@ -137,7 +150,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
   /** Registra movimientos y aplica el delta al stock. Devuelve los creados (para revertir en modo http). */
   const record = (list: Omit<RetailMovement, "id" | "date" | "user">[]) => {
     if (list.length === 0) return [];
-    const created = list.map((m) => ({ ...m, id: newId("rm"), date: TODAY, user: currentUser.name }));
+    const created = list.map((m) => ({ ...m, id: newId("rm"), date: stampToday(), user: currentUser.name }));
     setMovements((prev) => [...prev, ...created]);
     setProducts((prev) =>
       prev.map((p) => {
@@ -170,8 +183,8 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
       const sale: Sale = {
         id: newId("s"),
         number: Math.max(0, ...sales.map((s) => s.number)) + 1,
-        date: TODAY,
-        time: NOW_TIME,
+        date: stampToday(),
+        time: stampNowTime(),
         items,
         ownerRut,
         payment,
@@ -191,7 +204,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
           address: owner.address,
           sector: owner.sector,
           courier: delivery.courier,
-          scheduledFor: addDays(TODAY, 1),
+          scheduledFor: addDays(stampToday(), 1),
           status: "Por preparar",
         };
         shipmentId = shipment.id;
@@ -275,8 +288,8 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
         id: newId("ro"),
         number: Math.max(0, ...orders.map((o) => o.number)) + 1,
         supplierId,
-        date: TODAY,
-        expected: addDays(TODAY, leadTimeDays),
+        date: stampToday(),
+        expected: addDays(stampToday(), leadTimeDays),
         items: items.map((i) => ({ ...i, unitCost: products.find((p) => p.id === i.productId)?.cost ?? 0 })),
         status: "Borrador",
       };
@@ -319,7 +332,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
       const order = orders.find((o) => o.id === id);
       if (!order || order.status !== "Enviada") return;
       record(order.items.map((i) => ({ productId: i.productId, type: "Entrada", reason: "Compra", location: "central", qty: i.qty, ref: `OC ${order.number}` })));
-      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "Recibida", receivedAt: TODAY } : o)));
+      setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "Recibida", receivedAt: stampToday() } : o)));
       // T5-4: POST /api/v1/retail/purchase-orders/:id/receive aún NotImplemented
       // (exige body items con lote/vencimiento); se conserva el optimista sin key ni reconcile.
       runInBackground(services.retail.receiveOrder(id));

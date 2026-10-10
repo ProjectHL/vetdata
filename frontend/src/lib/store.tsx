@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import type { Appointment } from "@/domain/appointments";
 import type { Room } from "@/domain/clinic";
 import type { Invoice } from "@/domain/invoices";
@@ -34,7 +34,7 @@ import {
 import { seedGrants, seedRequests } from "@/mocks/sharing";
 import { ensureServerCatalogs, publish, read, readScalar } from "@/lib/server-state";
 import { dataSource, newIdempotencyKey, runInBackground, services } from "@/services";
-import { TODAY, addDays } from "@/lib/format";
+import { TODAY, addDays, realToday } from "@/lib/format";
 
 /**
  * Estado de sesión del prototipo: lo que se crea desde la UI
@@ -124,6 +124,15 @@ function getCurrentClinic() {
   return readScalar("currentClinic", mockCurrentClinic);
 }
 
+/**
+ * Sello de fecha para escrituras (T5-5): en modo http la fecha real del
+ * navegador (las mutaciones siempre corren post-mount: no hay riesgo de
+ * hidratación); en modo mock el fijo de la demo reproducible.
+ */
+function stampToday() {
+  return dataSource === "http" ? realToday() : TODAY;
+}
+
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [appointments, setAppointments] = useState(seedAppointments); // http: se hidrata con services.appointments.list()
@@ -138,7 +147,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   // Sin endpoint en el backend (NotImplemented: GET /api/v1/reminders): se conserva el estado local.
   const [reminders, setReminders] = useState<string[]>([]);
   const [taskMeta, setTaskMeta] = useState<Record<string, TaskMeta>>({}); // http: se hidrata con services.tasks.listMeta()
-  const [role, setRole] = useState<Role>("Veterinario"); // Demo: "Ver como". TODO(api): el rol sale de services.settings.getCurrentUser()
+  const [role, setRole] = useState<Role>("Veterinario"); // Mock: "Ver como". En http se inicializa con el rol del membership vigente (GET /me).
+  // T5-5: usuario de la sesión en modo http (GET /me → user). Nulo hasta
+  // resolver: `currentUser` usa la semilla como fallback (patrón T5-2) y el
+  // `loading`/`error` de la carga inicial ya cubre la sesión.
+  const [sessionUser, setSessionUser] = useState<User | null>(null);
+  // El rol inicial de la sesión se aplica una sola vez: un `retry` posterior
+  // no pisa un cambio manual de "Ver como".
+  const sessionApplied = useRef(false);
   const [users, setUsers] = useState(seedUsers); // http: se hidrata con services.settings.listUsers()
   const [rolePermissions, setRolePermissions] = useState(defaultRolePermissions); // http: se hidrata con services.settings.getRolePermissions()
   const [clinicProfile, setClinicProfile] = useState(seedClinicProfile); // http: se hidrata con services.settings.getClinicProfile()
@@ -164,6 +180,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         services.pharmacy.listMovements(),
         services.pharmacy.listPurchaseOrders(),
         services.tasks.listMeta(),
+        services.settings.getCurrentUser(),
         services.settings.listUsers(),
         services.settings.getRolePermissions(),
         services.settings.getClinicProfile(),
@@ -182,6 +199,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         movementsData,
         purchaseOrdersData,
         taskMetaData,
+        sessionData,
         usersData,
         rolePermissionsData,
         clinicProfileData,
@@ -200,6 +218,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setMovements(movementsData);
       setPurchaseOrders(purchaseOrdersData);
       setTaskMeta(taskMetaData);
+      setSessionUser(sessionData);
+      if (!sessionApplied.current) {
+        sessionApplied.current = true;
+        setRole(sessionData.role);
+      }
       if (usersData.length > 0) setUsers(usersData);
       setRolePermissions(rolePermissionsData);
       setClinicProfile(clinicProfileData);
@@ -232,12 +255,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     void load();
   };
 
-  const currentUser = users.find((u) => u.id === demoUserByRole[role])!;
+  /**
+   * Usuario actual: en http el de la sesión (GET /me → user); hasta que la
+   * sesión resuelve, la semilla del rol activo para no romper `currentUser!`
+   * (patrón T5-2). En mock siempre el demo de "Ver como".
+   */
+  const seedCurrentUser = users.find((u) => u.id === demoUserByRole[role])!;
+  const currentUser = dataSource === "http" ? (sessionUser ?? seedCurrentUser) : seedCurrentUser;
 
   /** Registra movimientos y aplica el delta al stock. Devuelve los creados (para revertir en modo http). */
   const recordMovements = (list: Omit<StockMovement, "id" | "date" | "user">[]) => {
     if (list.length === 0) return [];
-    const created = list.map((m) => ({ ...m, id: newId("mv"), date: TODAY, user: currentUser.name }));
+    const created = list.map((m) => ({ ...m, id: newId("mv"), date: stampToday(), user: currentUser.name }));
     setMovements((prev) => [...prev, ...created]);
     setMedications((prev) =>
       prev.map((med) => {
@@ -337,7 +366,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           from: getCurrentClinic(),
           to: p.clinic,
           requestedBy: currentUser.name,
-          date: TODAY,
+          date: stampToday(),
           reason,
           scope,
           duration,
@@ -380,7 +409,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // (sin respuesta de clínica en el backend); se conserva el optimista sin key ni reconcile.
       runInBackground(services.sharing.respond(id, { approve, terms }));
       setRequests((prev) =>
-        prev.map((r) => (r.id === id ? { ...r, status: approve ? "Aprobada" : "Rechazada", respondedAt: TODAY } : r))
+        prev.map((r) => (r.id === id ? { ...r, status: approve ? "Aprobada" : "Rechazada", respondedAt: stampToday() } : r))
       );
       if (!approve) return;
       const scope = terms?.scope ?? req.scope;
@@ -393,8 +422,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ownerClinic: req.to,
           grantedTo: req.from,
           scope,
-          since: TODAY,
-          until: duration ? addDays(TODAY, duration) : null,
+          since: stampToday(),
+          until: duration ? addDays(stampToday(), duration) : null,
           revoked: false,
         },
       ]);
@@ -481,7 +510,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         id: newId("oc"),
         number: Math.max(0, ...purchaseOrders.map((o) => o.number)) + 1,
         supplierId,
-        date: TODAY,
+        date: stampToday(),
         items: items.map((i) => ({
           ...i,
           unitCost: Math.round((medications.find((m) => m.id === i.medicationId)?.price ?? 0) * COST_RATIO),
@@ -535,7 +564,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ref: `OC ${order.number}`,
         }))
       );
-      setPurchaseOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "Recibida", receivedAt: TODAY } : o)));
+      setPurchaseOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "Recibida", receivedAt: stampToday() } : o)));
       // T5-4: POST /api/v1/pharmacy/purchase-orders/:id/receive aún NotImplemented
       // (exige body items con lote/vencimiento); se conserva el optimista sin key ni reconcile.
       runInBackground(services.pharmacy.receivePurchaseOrder(id));

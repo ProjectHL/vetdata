@@ -16,7 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { formatCLP } from "@/lib/format";
+import { formatCLP, useToday } from "@/lib/format";
 import {
   crossSellBySpecies,
   marginByCategory,
@@ -31,13 +31,15 @@ const single = (label: string) => ({ value: { label, color: "var(--viz-1)" } }) 
 
 export function RetailAnalytics() {
   const { sales, products, shipments } = useRetail();
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
   const s = salesBreakdown(sales);
   const margin = marginByCategory(sales, products);
   const turnover = productTurnover(sales, products);
   const breakSoon = turnover.filter((t) => t.coverageDays !== null && t.coverageDays < 7).sort((a, b) => a.coverageDays! - b.coverageDays!);
   const dead = turnover.filter((t) => t.sold === 0 && t.product.stock.central + t.product.stock.sala > 0);
   const topRotation = [...turnover].sort((a, b) => b.rotation - a.rotation).slice(0, 8);
-  const ship = shipmentKpis(shipments);
+  const ship = shipmentKpis(shipments, today);
   const cross = crossSellBySpecies(sales, products);
 
   return (

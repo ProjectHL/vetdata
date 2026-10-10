@@ -1,6 +1,74 @@
 // Fecha "actual" fija del prototipo: evita diferencias entre servidor y cliente.
+// En modo mock es la fecha de todo; en modo http solo es el valor SSR/primer
+// render. Los hooks `useToday`/`useNowTime`/`useNowIso` devuelven la fecha real
+// del navegador tras el montaje (sin mismatch de hidratación).
 export const TODAY = "2026-10-07";
 export const NOW_TIME = "11:05";
+
+import { useEffect, useState } from "react";
+
+/** Verdadero solo con `NEXT_PUBLIC_DATA_SOURCE=http` (se inyecta en build). */
+const isServerMode = process.env.NEXT_PUBLIC_DATA_SOURCE === "http";
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** Fecha real del navegador en "yyyy-mm-dd" (zona local). */
+export function realToday(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+}
+
+/** Hora real del navegador en "HH:MM" (zona local). */
+export function realNowTime(): string {
+  const d = new Date();
+  return `${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+}
+
+/** Momento real del navegador en "yyyy-mm-ddTHH:MM" (zona local). */
+export function realNowIso(): string {
+  return `${realToday()}T${realNowTime()}`;
+}
+
+/**
+ * "Hoy" compatible con hidratación (T5-5): SSR y primer render devuelven el
+ * fijo (idéntico al servidor); tras el montaje, en modo http, la fecha real
+ * del navegador. En modo mock siempre el fijo (demo reproducible).
+ */
+export function useToday(): string {
+  const [today, setToday] = useState(TODAY);
+  useEffect(() => {
+    if (!isServerMode) return;
+    const real = realToday();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount intencional: fecha real sin mismatch SSR
+    if (real !== TODAY) setToday(real);
+  }, []);
+  return today;
+}
+
+/** Hora "ahora" compatible con hidratación (mismo patrón que `useToday`). */
+export function useNowTime(): string {
+  const [now, setNow] = useState(NOW_TIME);
+  useEffect(() => {
+    if (!isServerMode) return;
+    const real = realNowTime();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount intencional: hora real sin mismatch SSR
+    if (real !== NOW_TIME) setNow(real);
+  }, []);
+  return now;
+}
+
+/** Momento "ahora" ISO compatible con hidratación (mismo patrón que `useToday`). */
+export function useNowIso(): string {
+  const [now, setNow] = useState(`${TODAY}T${NOW_TIME}`);
+  useEffect(() => {
+    if (!isServerMode) return;
+    const seed = `${TODAY}T${NOW_TIME}`;
+    const real = realNowIso();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- post-mount intencional: momento real sin mismatch SSR
+    if (real !== seed) setNow(real);
+  }, []);
+  return now;
+}
 
 const MONTHS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 

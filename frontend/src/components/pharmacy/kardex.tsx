@@ -20,7 +20,7 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import type { MovementType } from "@/domain/pharmacy";
-import { TODAY, addDays, formatDate } from "@/lib/format";
+import { addDays, formatDate, useToday } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -39,8 +39,10 @@ export function Kardex() {
   const [type, setType] = useState<"all" | MovementType>("all");
   const [medId, setMedId] = useState("all");
   const [period, setPeriod] = useState<keyof typeof PERIODS>("30");
+  // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
+  const today = useToday();
 
-  const from = period === "all" ? "" : addDays(TODAY, -Number(period));
+  const from = period === "all" ? "" : addDays(today, -Number(period));
   const inPeriod = movements.filter((m) => m.date >= from);
   const totals = {
     in: inPeriod.filter((m) => m.qty > 0).reduce((s, m) => s + m.qty, 0),
