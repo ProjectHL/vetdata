@@ -33,8 +33,9 @@ export const support: SupportService = {
     }),
   /** GET /api/v1/support/ideas */
   listIdeas: () => apiFetch<Idea[]>("/api/v1/support/ideas"),
-  /** POST /api/v1/support/ideas/:id/vote */
-  vote: (id) => apiFetch<Idea>(`/api/v1/support/ideas/${encodeURIComponent(id)}/vote`, { method: "POST" }),
+  /** POST /api/v1/support/ideas/:id/vote — idempotente: {voted}. */
+  vote: (id, voted) =>
+    apiFetch<Idea>(`/api/v1/support/ideas/${encodeURIComponent(id)}/vote`, { method: "POST", body: { voted } }),
   /** POST /api/v1/support/ideas — el backend devuelve {idea, ticket}. */
   proposeIdea: (input) =>
     apiFetch<ProposeIdeaResult>("/api/v1/support/ideas", { method: "POST", body: input }),

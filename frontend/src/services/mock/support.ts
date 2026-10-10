@@ -42,8 +42,11 @@ export const support: SupportService = {
   changeStatus: (id, status) => updateTicket(id, (t) => ({ ...t, status })),
   rate: (id, rating) => updateTicket(id, (t) => ({ ...t, rating, status: "Cerrado" })),
   listIdeas: () => ok(db.ideas),
-  vote: (id) => {
-    const idea = patchById(db.ideas, id, (i) => ({ ...i, votedByMe: !i.votedByMe, votes: i.votes + (i.votedByMe ? -1 : 1) }));
+  vote: (id, voted) => {
+    const idea = patchById(db.ideas, id, (i) => {
+      if (i.votedByMe === voted) return i; // no-op idempotente
+      return { ...i, votedByMe: voted, votes: i.votes + (voted ? 1 : -1) };
+    });
     return idea ? ok(idea) : notFound("Idea", id);
   },
   proposeIdea: ({ title, description, module }) => {

@@ -216,16 +216,17 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
       })),
     voteIdea: (id) => {
       const prev = ideas.find((i) => i.id === id);
+      // Optimista: invierte el voto con el estado deseado.
       setIdeas((prevIdeas) =>
         prevIdeas.map((i) => (i.id === id ? { ...i, votedByMe: !i.votedByMe, votes: i.votes + (i.votedByMe ? -1 : 1) } : i))
       );
       if (dataSource !== "http" || !prev) {
-        runInBackground(services.support.vote(id));
+        runInBackground(services.support.vote(id, !prev?.votedByMe));
         return;
       }
       newIdempotencyKey();
       runInBackground(
-        services.support.vote(id).then(
+        services.support.vote(id, !prev.votedByMe).then(
           (saved) => setIdeas((prevIdeas) => prevIdeas.map((i) => (i.id === saved.id ? saved : i))),
           () => {
             setIdeas((prevIdeas) => prevIdeas.map((i) => (i.id === id ? prev : i)));

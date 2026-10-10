@@ -658,28 +658,34 @@ func (s *Server) voteIdea(w http.ResponseWriter, r *http.Request) error {
 	if !domain.ValidID(id) {
 		return fail(400, "invalid_id", "Identificador inválido")
 	}
-	return s.mutate(w, r, a, "soporte.crear", map[string]string{"id": id}, 200, func(tx pgx.Tx, a Actor) (any, error) {
+	var in struct {
+		Voted bool `json:"voted"`
+	}
+	if err = decode(w, r, &in); err != nil {
+		return err
+	}
+	return s.mutate(w, r, a, "soporte.crear", map[string]any{"id": id, "voted": in.Voted}, 200, func(tx pgx.Tx, a Actor) (any, error) {
 		var status string
-		if err := tx.QueryRow(r.Context(), "SELECT status FROM support_ideas WHERE id=$1", id).Scan(&status); err != nil {
+		var voted bool
+		if err := tx.QueryRow(r.Context(), "SELECT status,EXISTS(SELECT 1 FROM support_votes WHERE idea_id=$1 AND clinic_id=$2) AS voted FROM support_ideas WHERE id=$1 FOR UPDATE", id, a.ClinicID).Scan(&status, &voted); err != nil {
 			return nil, err
 		}
 		if status == "Lanzada" {
 			return nil, fail(409, "idea_launched", "La idea lanzada no se vota")
 		}
-		var voted bool
-		if err := tx.QueryRow(r.Context(), "SELECT EXISTS(SELECT 1 FROM support_votes WHERE idea_id=$1 AND clinic_id=$2)", id, a.ClinicID).Scan(&voted); err != nil {
-			return nil, err
+		if voted == in.Voted {
+			return ideaJSON(r.Context(), tx, a.ClinicID, id)
 		}
-		if voted {
-			if _, err := tx.Exec(r.Context(), "DELETE FROM support_votes WHERE idea_id=$1 AND clinic_id=$2", id, a.ClinicID); err != nil {
+		if in.Voted {
+			if _, err := tx.Exec(r.Context(), "INSERT INTO support_votes(idea_id,clinic_id) VALUES($1,$2) ON CONFLICT DO NOTHING", id, a.ClinicID); err != nil {
 				return nil, err
 			}
 		} else {
-			if _, err := tx.Exec(r.Context(), "INSERT INTO support_votes(idea_id,clinic_id) VALUES($1,$2)", id, a.ClinicID); err != nil {
+			if _, err := tx.Exec(r.Context(), "DELETE FROM support_votes WHERE idea_id=$1 AND clinic_id=$2", id, a.ClinicID); err != nil {
 				return nil, err
 			}
 		}
-		if err := audit(r.Context(), tx, a, "support.voted", id, map[string]any{"voted": !voted}); err != nil {
+		if err := audit(r.Context(), tx, a, "support.voted", id, map[string]any{"voted": in.Voted}); err != nil {
 			return nil, err
 		}
 		return ideaJSON(r.Context(), tx, a.ClinicID, id)

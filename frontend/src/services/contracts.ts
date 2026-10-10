@@ -260,8 +260,8 @@ export interface SupportService {
   rate(id: string, rating: number): Promise<Ticket>;
   /** GET /api/v1/support/ideas */
   listIdeas(): Promise<Idea[]>;
-  /** POST /api/v1/support/ideas/:id/vote — alterna el voto de la clínica. */
-  vote(id: string): Promise<Idea>;
+  /** POST /api/v1/support/ideas/:id/vote — idempotente: {voted}. */
+  vote(id: string, voted: boolean): Promise<Idea>;
   /** POST /api/v1/support/ideas — crea la idea y su ticket "Mejora" vinculado. */
   proposeIdea(input: NewIdea): Promise<ProposeIdeaResult>;
   /** GET /api/v1/support/releases */
