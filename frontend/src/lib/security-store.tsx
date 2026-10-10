@@ -16,8 +16,9 @@ import type {
   WaitingEntry,
   Zone,
 } from "@/domain/security";
-import { getOwner, getPatient } from "@/lib/lookups";
 import {
+  getOwner,
+  getPatient,
   seedAccess,
   seedAudit,
   seedCameras,
@@ -25,7 +26,7 @@ import {
   seedEvents,
   seedSecuritySettings,
   seedWaiting,
-} from "@/mocks/security";
+} from "@/lib/lookups";
 import { dataSource, runInBackground, services } from "@/services";
 import { NOW_ISO, NOW_TIME } from "@/lib/format";
 import { useStore } from "@/lib/store";

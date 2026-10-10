@@ -7,20 +7,23 @@ import {
   type Product,
   type RetailMovement,
   type RetailOrder,
+  type RetailSupplier,
   type Sale,
   type SaleItem,
   type Shipment,
   SHIPMENT_FLOW,
   deliveryFee,
 } from "@/domain/retail";
-import { getOwner } from "@/lib/lookups";
 import {
   buildSeedShipments,
+  getOwner,
   seedProducts,
   seedRetailMovements,
   seedRetailOrders,
   seedSales,
-} from "@/mocks/retail";
+  retailSuppliers as seedRetailSuppliers,
+} from "@/lib/lookups";
+import { publish } from "@/lib/server-state";
 import { dataSource, runInBackground, services } from "@/services";
 import { NOW_TIME, TODAY, addDays } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -74,6 +77,8 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
   const [movements, setMovements] = useState(seedRetailMovements); // http: se hidrata con services.retail.listMovements()
   const [orders, setOrders] = useState(seedRetailOrders); // http: se hidrata con services.retail.listOrders()
   const [shipments, setShipments] = useState(() => buildSeedShipments(seedSales, addressOf)); // http: se hidrata con services.retail.listShipments()
+  // Catálogo publicado al registro de lib (no se expone: la UI lo lee vía lookups.retailSuppliers).
+  const [suppliers, setSuppliers] = useState<RetailSupplier[]>(seedRetailSuppliers); // http: se hidrata con services.retail.listSuppliers()
 
   // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
   const [loading, setLoading] = useState(dataSource === "http");
@@ -83,18 +88,22 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     if (dataSource !== "http") return;
     try {
-      const [productsData, salesData, movementsData, ordersData, shipmentsData] = await Promise.all([
+      const [productsData, salesData, movementsData, ordersData, shipmentsData, suppliersData] = await Promise.all([
         services.retail.listProducts(),
         services.retail.listSales(),
         services.retail.listMovements(),
         services.retail.listOrders(),
         services.retail.listShipments(),
+        services.retail.listSuppliers(),
       ]);
+      // Publica antes de los setState para que el re-render ya lea el registro fresco.
+      publish("retailSuppliers", suppliersData);
       setProducts(productsData);
       setSales(salesData);
       setMovements(movementsData);
       setOrders(ordersData);
       setShipments(shipmentsData);
+      setSuppliers(suppliersData);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo cargar la información de la tienda");
     } finally {
@@ -107,6 +116,12 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount intencional del store en modo http
     if (dataSource === "http") void load();
   }, [load]);
+
+  // T5-3a: publica el catálogo hidratado al registro de lib cuando cambia.
+  // Solo http; en mock `publish` no hace nada. No hace setState: no hay cascada.
+  useEffect(() => {
+    publish("retailSuppliers", suppliers);
+  }, [suppliers]);
 
   const retry = () => {
     setLoading(true);

@@ -16,21 +16,26 @@ import {
   accessLevel,
 } from "@/domain/sharing";
 import type { TaskMeta } from "@/domain/tasks";
-import { currentClinic, doctors, getPatient } from "@/lib/lookups";
-import { seedAppointments } from "@/mocks/appointments";
-import { rooms as seedRooms } from "@/mocks/clinic";
-import { seedInvoices } from "@/mocks/invoices";
-import { medications as seedMedications } from "@/mocks/medications";
-import { seedMovements, seedPurchaseOrders } from "@/mocks/pharmacy";
-import { seedReferrals } from "@/mocks/referrals";
 import {
+  currentClinic,
   defaultRolePermissions,
   demoUserByRole,
+  doctors,
+  getPatient,
+  seedAppointments,
   seedClinicProfile,
+  seedGrants,
+  seedInvoices,
+  medications as seedMedications,
+  seedMovements,
+  seedPurchaseOrders,
+  seedReferrals,
+  seedRequests,
+  rooms as seedRooms,
   seedSharingPolicy,
   seedUsers,
-} from "@/mocks/settings";
-import { seedGrants, seedRequests } from "@/mocks/sharing";
+} from "@/lib/lookups";
+import { ensureServerCatalogs, publish } from "@/lib/server-state";
 import { dataSource, runInBackground, services } from "@/services";
 import { TODAY, addDays } from "@/lib/format";
 
@@ -141,21 +146,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     if (dataSource !== "http") return;
     try {
-      const [
-        appointmentsData,
-        invoicesData,
-        referralsData,
-        requestsData,
-        grantsData,
-        roomsData,
-        medicationsData,
-        movementsData,
-        purchaseOrdersData,
-        taskMetaData,
-        usersData,
-        rolePermissionsData,
-        clinicProfileData,
-      ] = await Promise.all([
+      const core = Promise.all([
         services.appointments.list(),
         services.invoices.list(),
         services.referrals.list(),
@@ -170,6 +161,28 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         services.settings.getRolePermissions(),
         services.settings.getClinicProfile(),
       ]);
+      // Catálogos sin store dueño + series de analytics: publican en el
+      // registro de lib sin romper esta carga (nunca lanza; ver server-state).
+      const catalogs = ensureServerCatalogs();
+      const [
+        appointmentsData,
+        invoicesData,
+        referralsData,
+        requestsData,
+        grantsData,
+        roomsData,
+        medicationsData,
+        movementsData,
+        purchaseOrdersData,
+        taskMetaData,
+        usersData,
+        rolePermissionsData,
+        clinicProfileData,
+      ] = await core;
+      await catalogs;
+      // Publica antes de los setState para que el re-render ya lea el registro fresco.
+      publish("rooms", roomsData);
+      publish("medications", medicationsData);
       setAppointments(appointmentsData);
       setInvoices(invoicesData);
       setReferrals(referralsData);
@@ -195,6 +208,16 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount intencional del store en modo http
     if (dataSource === "http") void load();
   }, [load]);
+
+  // T5-3a: publica las listas hidratadas al registro de lib cuando cambian
+  // (mutaciones post-carga como updateRoom o dispenseReferral). Solo http;
+  // en mock `publish` no hace nada. No hacen setState: no hay cascada.
+  useEffect(() => {
+    publish("rooms", rooms);
+  }, [rooms]);
+  useEffect(() => {
+    publish("medications", medications);
+  }, [medications]);
 
   const retry = () => {
     setLoading(true);
