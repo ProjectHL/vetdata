@@ -25,6 +25,8 @@ func (s *Server) authRoutes(m *http.ServeMux) {
 	s.route(m, "POST /api/v1/auth/login", s.login)
 	s.route(m, "POST /api/v1/auth/refresh", s.refresh)
 	s.route(m, "POST /api/v1/auth/logout", s.logout)
+	s.route(m, "POST /api/v1/auth/mfa/enroll", s.enrollMFA)
+	s.route(m, "POST /api/v1/auth/mfa/verify", s.verifyMFA)
 	s.route(m, "POST /api/v1/auth/recovery", s.recoverPassword)
 	s.route(m, "POST /api/v1/auth/reset", s.resetPassword)
 	s.route(m, "POST /api/v1/auth/clinic", s.switchClinic)
@@ -96,26 +98,121 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) error {
 	if err != nil {
 		return err
 	}
+	var role string
+	if err = tx.QueryRow(r.Context(), "SELECT role FROM memberships WHERE user_id=$1 AND clinic_id=$2 AND status='Activo'", uid, clinic).Scan(&role); err != nil {
+		return err
+	}
+	if role == "Admin" {
+		var enabled bool
+		if err = tx.QueryRow(r.Context(), "SELECT coalesce((SELECT enabled FROM auth_mfa WHERE user_id=$1),false)", uid).Scan(&enabled); err != nil {
+			return err
+		}
+		if enabled {
+			challenge := token()
+			if _, err = tx.Exec(r.Context(), "INSERT INTO auth_mfa_challenges(token_hash,user_id,clinic_id,expires_at) VALUES($1,$2,$3,now()+interval '5 minutes')", digest(challenge), uid, clinic); err != nil {
+				return err
+			}
+			if err = tx.Commit(r.Context()); err != nil {
+				return err
+			}
+			writeJSON(w, 202, map[string]any{"twoFactorRequired": true, "challengeToken": challenge})
+			return nil
+		}
+	}
+	return s.issueSession(r.Context(), w, tx, uid, clinic)
+}
+func (s *Server) issueSession(ctx context.Context, w http.ResponseWriter, tx pgx.Tx, uid, clinic string) error {
 	access, refresh := token(), token()
 	var sid string
-	err = tx.QueryRow(r.Context(), `INSERT INTO auth_sessions(user_id,clinic_id,access_hash,access_expires_at,expires_at)
+	err := tx.QueryRow(ctx, `INSERT INTO auth_sessions(user_id,clinic_id,access_hash,access_expires_at,expires_at)
  VALUES($1,$2,$3,now()+interval '15 minutes',now()+interval '30 days') RETURNING id`, uid, clinic, digest(access)).Scan(&sid)
 	if err != nil {
 		return err
 	}
-	if _, err = tx.Exec(r.Context(), "INSERT INTO auth_refresh_tokens(token_hash,session_id) VALUES($1,$2)", digest(refresh), sid); err != nil {
+	if _, err = tx.Exec(ctx, "INSERT INTO auth_refresh_tokens(token_hash,session_id) VALUES($1,$2)", digest(refresh), sid); err != nil {
 		return err
 	}
-	if _, err = tx.Exec(r.Context(), "UPDATE users SET last_access=now() WHERE id=$1", uid); err != nil {
+	if _, err = tx.Exec(ctx, "UPDATE users SET last_access=now() WHERE id=$1", uid); err != nil {
 		return err
 	}
-	if err = tx.Commit(r.Context()); err != nil {
+	if err = tx.Commit(ctx); err != nil {
 		return err
 	}
 	s.cookies(w, access, refresh)
 	writeJSON(w, 200, map[string]bool{"authenticated": true})
 	return nil
 }
+
+func (s *Server) enrollMFA(w http.ResponseWriter, r *http.Request) error {
+	a, err := s.actor(r)
+	if err != nil {
+		return err
+	}
+	if a.Role != "Admin" {
+		return fail(403, "forbidden", "Solo Admin puede enrolar 2FA")
+	}
+	codes := make([]string, 5)
+	hashes := make([]string, 5)
+	for i := range codes {
+		codes[i] = token()[:12]
+		hashes[i] = digest(codes[i])
+	}
+	_, err = s.pool.Exec(r.Context(), `INSERT INTO auth_mfa(user_id,enabled,recovery_hashes,updated_at) VALUES($1,true,$2,now())
+ ON CONFLICT(user_id) DO UPDATE SET enabled=true,recovery_hashes=excluded.recovery_hashes,updated_at=now()`, a.UserID, strings.Join(hashes, ","))
+	if err != nil {
+		return err
+	}
+	writeJSON(w, 200, map[string]any{"enabled": true, "recoveryCodes": codes})
+	return nil
+}
+
+func (s *Server) verifyMFA(w http.ResponseWriter, r *http.Request) error {
+	var in struct {
+		ChallengeToken string `json:"challengeToken"`
+		Code           string `json:"code"`
+	}
+	if err := decode(w, r, &in); err != nil {
+		return err
+	}
+	if strings.TrimSpace(in.ChallengeToken) == "" || strings.TrimSpace(in.Code) == "" {
+		return fail(400, "invalid_mfa", "Código 2FA requerido")
+	}
+	tx, err := s.pool.Begin(r.Context())
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(context.Background())
+	var uid, clinic, hashes string
+	err = tx.QueryRow(r.Context(), `SELECT c.user_id,c.clinic_id,m.recovery_hashes FROM auth_mfa_challenges c JOIN auth_mfa m ON m.user_id=c.user_id
+ WHERE c.token_hash=$1 AND c.used_at IS NULL AND c.expires_at>now() AND m.enabled=true FOR UPDATE OF c,m`, digest(in.ChallengeToken)).Scan(&uid, &clinic, &hashes)
+	if err == pgx.ErrNoRows {
+		return fail(401, "invalid_mfa", "Desafío 2FA inválido")
+	}
+	if err != nil {
+		return err
+	}
+	parts := strings.Split(hashes, ",")
+	codeHash := digest(strings.TrimSpace(in.Code))
+	found := -1
+	for i, h := range parts {
+		if h == codeHash {
+			found = i
+			break
+		}
+	}
+	if found < 0 {
+		return fail(401, "invalid_mfa", "Código 2FA inválido")
+	}
+	parts = append(parts[:found], parts[found+1:]...)
+	if _, err = tx.Exec(r.Context(), "UPDATE auth_mfa SET recovery_hashes=$2,updated_at=now() WHERE user_id=$1", uid, strings.Join(parts, ",")); err != nil {
+		return err
+	}
+	if _, err = tx.Exec(r.Context(), "UPDATE auth_mfa_challenges SET used_at=now() WHERE token_hash=$1", digest(in.ChallengeToken)); err != nil {
+		return err
+	}
+	return s.issueSession(r.Context(), w, tx, uid, clinic)
+}
+
 func (s *Server) refresh(w http.ResponseWriter, r *http.Request) error {
 	c, err := r.Cookie("vetdata_refresh")
 	if err != nil {

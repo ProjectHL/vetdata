@@ -229,3 +229,86 @@ func TestOriginStatusAndStrictInput(t *testing.T) {
 		t.Fatal("inactive login", w.Code)
 	}
 }
+
+func TestAdminMFAEnrollChallengeAndVerify(t *testing.T) {
+	f := newFixture(t)
+	admin := f.login(t)
+	w := f.request("POST", "/api/v1/auth/mfa/enroll", map[string]any{}, admin...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	var enrolled map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &enrolled)
+	codes, ok := enrolled["recoveryCodes"].([]any)
+	if !ok || len(codes) == 0 {
+		t.Fatal("recovery codes missing", enrolled)
+	}
+	code := codes[0].(string)
+
+	// Password login for an enrolled Admin returns a challenge and no session cookies.
+	w = f.request("POST", "/api/v1/auth/login", map[string]string{"email": "test@example.test", "password": "Test-password-123", "clinicId": f.clinic})
+	if w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	if len(w.Result().Cookies()) != 0 {
+		t.Fatal("challenge issued cookies")
+	}
+	var challenged map[string]any
+	_ = json.Unmarshal(w.Body.Bytes(), &challenged)
+	challenge, _ := challenged["challengeToken"].(string)
+	if challenge == "" || challenged["twoFactorRequired"] != true {
+		t.Fatal("challenge missing", challenged)
+	}
+	w = f.request("POST", "/api/v1/auth/mfa/verify", map[string]string{"challengeToken": challenge, "code": code})
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	cookies := w.Result().Cookies()
+	if len(cookies) == 0 {
+		t.Fatal("verify did not issue cookies")
+	}
+	w = f.request("GET", "/api/v1/me", nil, cookies...)
+	if w.Code != 200 {
+		t.Fatal("verified session", w.Code, w.Body.String())
+	}
+	// Code is single-use and challenge is consumed.
+	w = f.request("POST", "/api/v1/auth/mfa/verify", map[string]string{"challengeToken": challenge, "code": code})
+	if w.Code != 401 {
+		t.Fatal("reused mfa", w.Code, w.Body.String())
+	}
+}
+
+func TestAdminMFAResetDoesNotBypassSecondFactor(t *testing.T) {
+	f := newFixture(t)
+	admin := f.login(t)
+	w := f.request("POST", "/api/v1/auth/mfa/enroll", map[string]any{}, admin...)
+	if w.Code != 200 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/auth/recovery", map[string]string{"email": "test@example.test"})
+	if w.Code != 202 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	delivered, err := f.mail.DeliverOne(context.Background())
+	if err != nil || !delivered {
+		t.Fatal(delivered, err)
+	}
+	raw := strings.Split(f.sender.messages[len(f.sender.messages)-1].Body, "#token=")[1]
+	w = f.request("POST", "/api/v1/auth/reset", map[string]string{"token": raw, "password": "Changed-password-123"})
+	if w.Code != 204 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	w = f.request("POST", "/api/v1/auth/login", map[string]string{"email": "test@example.test", "password": "Changed-password-123", "clinicId": f.clinic})
+	if w.Code != 202 {
+		t.Fatal("reset bypassed mfa", w.Code, w.Body.String())
+	}
+}
+
+func TestMFAEnrollRequiresAdmin(t *testing.T) {
+	f := newFixture(t)
+	vet := f.loginAs(t, "Veterinario")
+	w := f.request("POST", "/api/v1/auth/mfa/enroll", map[string]any{}, vet...)
+	if w.Code != 403 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+}
