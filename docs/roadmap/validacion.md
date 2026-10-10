@@ -96,12 +96,12 @@ Suite Docker/Postgres aislada ejecutada con salida 0. [Evidencia, contratos y br
 
 | Aceptada | Tarea | Estado | Evidencia actual / exigida | Revisión y observaciones |
 |---|---|---|---|---|
-| [ ] | T5-1 | pendiente | Sin evidencia funcional registrada. Exigir: Inventario completo de operaciones implementadas/sustituidas; sin NotImplementedError en rutas habilitadas. | Pendiente de revisión. |
-| [ ] | T5-2 | pendiente | Sin evidencia funcional registrada. Exigir: Recarga conserva estado; cambio de clínica limpia datos/caché del tenant anterior. | Pendiente de revisión. |
-| [ ] | T5-3 | pendiente | Sin evidencia funcional registrada. Exigir: Pantallas, búsqueda, tareas y analítica no muestran datos de mocks en modo HTTP. | Pendiente de revisión. |
-| [ ] | T5-4 | pendiente | Sin evidencia funcional registrada. Exigir: No navegar a ticket con id temporal; errores revierten estado optimista o recargan recurso. | Pendiente de revisión. |
-| [ ] | T5-5 | pendiente | Sin evidencia funcional registrada. Exigir: Navegación y roles sobreviven recarga; fechas civiles y hora local correctas. | Pendiente de revisión. |
-| [ ] | T5-6 | pendiente | Sin evidencia funcional registrada. Exigir: E2E en navegador; recarga conserva datos; no existe aprobación por clínica ni consentimiento ajeno por checkbox. | Pendiente de revisión. |
+| [ ] | T5-1 | pendiente | Implementación y pruebas en [cierre-fase-05.md](cierre-fase-05.md). Exigir: Inventario completo de operaciones implementadas/sustituidas; sin NotImplementedError en rutas habilitadas. | Pendiente de revisión. |
+| [ ] | T5-2 | pendiente | Implementación y pruebas en [cierre-fase-05.md](cierre-fase-05.md). Exigir: Recarga conserva estado; cambio de clínica limpia datos/caché del tenant anterior. | Pendiente de revisión. |
+| [ ] | T5-3 | pendiente | Implementación y pruebas en [cierre-fase-05.md](cierre-fase-05.md). Exigir: Pantallas, búsqueda, tareas y analítica no muestran datos de mocks en modo HTTP. | Pendiente de revisión. |
+| [ ] | T5-4 | pendiente | Implementación y pruebas en [cierre-fase-05.md](cierre-fase-05.md). Exigir: No navegar a ticket con id temporal; errores revierten estado optimista o recargan recurso. | Pendiente de revisión. |
+| [ ] | T5-5 | pendiente | Implementación y pruebas en [cierre-fase-05.md](cierre-fase-05.md). Exigir: Navegación y roles sobreviven recarga; fechas civiles y hora local correctas. | Pendiente de revisión. |
+| [ ] | T5-6 | pendiente | Implementación y pruebas en [cierre-fase-05.md](cierre-fase-05.md). Exigir: E2E en navegador; recarga conserva datos; no existe aprobación por clínica ni consentimiento ajeno por checkbox. | Pendiente de revisión. |
 
 ## Fase 6 — Endurecimiento
 
