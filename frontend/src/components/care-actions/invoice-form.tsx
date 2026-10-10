@@ -21,13 +21,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { billableServices as services, getOwner } from "@/lib/lookups";
 import type { Invoice, InvoiceItem } from "@/domain/invoices";
 import { ownerName } from "@/domain/owners";
 import type { Patient } from "@/domain/patients";
 import { IVA_RATE } from "@/domain/services";
 import { TODAY, formatCLP, formatDate, formatRut } from "@/lib/format";
 import { useStore } from "@/lib/store";
+import { read } from "@/lib/server-state";
+import { owners as mockOwners } from "@/mocks/owners";
+import { services } from "@/mocks/services";
 import { SuccessPanel } from "./field";
 
 type Row = InvoiceItem & { key: number };
@@ -42,7 +44,8 @@ function totals(items: InvoiceItem[]) {
 
 export function InvoiceForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
   const { addInvoice, medications } = useStore();
-  const owner = getOwner(patient.ownerRut)!;
+  const owners = read("owners", mockOwners);
+  const owner = owners.find((o) => o.rut === patient.ownerRut)!;
   const [rows, setRows] = useState<Row[]>([
     { key: ++rowKey, description: services[0].name, qty: 1, unitPrice: services[0].price },
   ]);
@@ -202,7 +205,8 @@ function Totals({ net, iva, total }: { net: number; iva: number; total: number }
 }
 
 export function InvoicePreview({ invoice, patient }: { invoice: Invoice; patient: Patient }) {
-  const owner = getOwner(invoice.ownerRut)!;
+  const owners = read("owners", mockOwners);
+  const owner = owners.find((o) => o.rut === invoice.ownerRut)!;
   const { clinicProfile } = useStore();
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-4">

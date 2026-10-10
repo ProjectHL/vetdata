@@ -7,15 +7,19 @@ import { SpeciesIcon } from "@/components/patients/species-icon";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { doctors, getPatient } from "@/lib/lookups";
 import { INTERNAL_PHARMACY } from "@/domain/referrals";
 import { formatDate } from "@/lib/format";
+import { read } from "@/lib/server-state";
+import { doctors as mockDoctors } from "@/mocks/clinic";
+import { patients as mockPatients } from "@/mocks/patients";
 import { useStore } from "@/lib/store";
 import { EmptyState } from "@/components/layout/empty-state";
 
 /** Derivaciones a farmacia interna pendientes de entrega. */
 export function DispenseQueue() {
   const { referrals, medications, dispenseReferral } = useStore();
+  const doctors = read("doctors", mockDoctors);
+  const patients = read("patients", mockPatients);
   const queue = referrals
     .filter((r) => r.destination === INTERNAL_PHARMACY && r.status !== "Dispensada")
     .sort((a, b) => a.date.localeCompare(b.date));
@@ -35,7 +39,7 @@ export function DispenseQueue() {
           <EmptyState icon={PackageCheck} title="No hay derivaciones pendientes." className="py-8" />
         )}
         {queue.map((r) => {
-          const patient = getPatient(r.patientId)!;
+          const patient = patients.find((p) => p.id === r.patientId)!;
           const doctor = doctors.find((d) => d.id === r.doctorId);
           const lines = r.items.map((i) => {
             const med = medications.find((m) => m.id === i.medicationId)!;

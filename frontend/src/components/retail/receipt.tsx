@@ -1,17 +1,19 @@
 "use client";
 
-import { getOwner } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { type Sale, ivaIncluded } from "@/domain/retail";
 import { formatCLP, formatDate, formatRut } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
+import { read } from "@/lib/server-state";
+import { owners as mockOwners } from "@/mocks/owners";
 import { useStore } from "@/lib/store";
 
 /** Boleta electrónica (vista previa). */
 export function Receipt({ sale }: { sale: Sale }) {
   const { clinicProfile } = useStore();
   const { products } = useRetail();
-  const owner = sale.ownerRut ? getOwner(sale.ownerRut) : undefined;
+  const owners = read("owners", mockOwners);
+  const owner = sale.ownerRut ? owners.find((o) => o.rut === sale.ownerRut) : undefined;
   return (
     <div className="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
       <div className="flex justify-between gap-4">

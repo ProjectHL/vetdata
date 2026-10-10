@@ -13,16 +13,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { clinics, currentClinic } from "@/lib/lookups";
 import { type Medication, stockStatus } from "@/domain/medications";
 import type { Patient } from "@/domain/patients";
 import { INTERNAL_PHARMACY, type Referral, type ReferralItem } from "@/domain/referrals";
 import { TODAY } from "@/lib/format";
+import { read, readScalar } from "@/lib/server-state";
+import { clinics as mockClinics, currentClinic as mockCurrentClinic } from "@/mocks/network";
 import { useDoctors, useStore } from "@/lib/store";
 import { Field, SuccessPanel } from "./field";
 
 const FREQUENCIES = ["Cada 8 h", "Cada 12 h", "Cada 24 h", "Cada 48 h", "Semanal", "Mensual", "Dosis única"];
-const destinations = [INTERNAL_PHARMACY, ...clinics.filter((c) => c !== currentClinic)];
 
 // Familias de fármacos para cruzar con alergias declaradas.
 const ALLERGY_FAMILIES: Record<string, string[]> = {
@@ -44,6 +44,9 @@ let rowKey = 0;
 export function ReferralForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
   const { addReferral, medications, currentUser } = useStore();
   const doctors = useDoctors();
+  const clinics = read("clinics", mockClinics);
+  const currentClinic = readScalar("currentClinic", mockCurrentClinic);
+  const destinations = [INTERNAL_PHARMACY, ...clinics.filter((c) => c !== currentClinic)];
   const [destination, setDestination] = useState(INTERNAL_PHARMACY);
   const [doctorId, setDoctorId] = useState(currentUser.doctorId ?? doctors[0]?.id ?? "");
   const [rows, setRows] = useState<Row[]>([]);

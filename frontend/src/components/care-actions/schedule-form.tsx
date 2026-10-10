@@ -11,18 +11,19 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { doctors as allDoctors, rooms } from "@/lib/lookups";
 import { type Appointment, SLOTS } from "@/domain/appointments";
 import type { Patient } from "@/domain/patients";
 import { TODAY, formatDate } from "@/lib/format";
+import { read } from "@/lib/server-state";
+import { doctors as mockDoctors } from "@/mocks/clinic";
 import { useDoctors, useStore } from "@/lib/store";
 import { Field, SuccessPanel } from "./field";
 
-const boxes = rooms.filter((r) => r.kind === "box");
-
 export function ScheduleForm({ patient, onDone }: { patient: Patient; onDone: () => void }) {
-  const { appointments, addAppointment } = useStore();
+  const { appointments, addAppointment, rooms } = useStore();
   const doctors = useDoctors();
+  const allDoctors = read("doctors", mockDoctors);
+  const boxes = rooms.filter((r) => r.kind === "box");
   const [date, setDate] = useState(TODAY);
   const [doctorId, setDoctorId] = useState("");
   const [time, setTime] = useState("");

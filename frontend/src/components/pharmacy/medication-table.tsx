@@ -24,15 +24,12 @@ import {
 } from "@/components/ui/table";
 import { Guard } from "@/components/settings/guard";
 import { Button } from "@/components/ui/button";
-import { medications as catalog } from "@/lib/lookups";
 import { EXPIRY_WARNING_DAYS, type Medication, type StockStatus, expiryStatus, stockStatus } from "@/domain/medications";
 import { useStore } from "@/lib/store";
 import { AdjustStockDialog } from "./adjust-stock-dialog";
 import { formatDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 import { EmptyState } from "@/components/layout/empty-state";
-
-const categories = [...new Set(catalog.map((m) => m.category))].sort();
 
 const stockBadge: Record<StockStatus, "default" | "secondary" | "destructive"> = {
   Disponible: "default",
@@ -52,6 +49,7 @@ export function MedicationTable() {
   const [onlyLow, setOnlyLow] = useState(false);
   const [adjusting, setAdjusting] = useState<Medication | null>(null);
   const { medications } = useStore();
+  const categories = [...new Set(medications.map((m) => m.category))].sort();
   const kpis = [
     { label: "Productos en catálogo", icon: Pill, value: medications.length, tone: "text-primary" },
     {

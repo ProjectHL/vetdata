@@ -15,11 +15,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { getOwner } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { SHIPMENT_FLOW, type ShipmentStatus } from "@/domain/retail";
 import { formatCLP, formatDate } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
+import { read } from "@/lib/server-state";
+import { owners as mockOwners } from "@/mocks/owners";
 
 const statusIcon: Record<ShipmentStatus, React.ComponentType<{ className?: string }>> = {
   "Por preparar": Package,
@@ -30,6 +31,7 @@ const statusIcon: Record<ShipmentStatus, React.ComponentType<{ className?: strin
 
 export function Shipments() {
   const { shipments, sales, advanceShipment } = useRetail();
+  const owners = read("owners", mockOwners);
   const [sector, setSector] = useState("all");
   const sectors = [...new Set(shipments.map((s) => s.sector))].sort();
   const list = shipments.filter((s) => sector === "all" || s.sector === sector);
@@ -83,7 +85,7 @@ export function Shipments() {
               </p>
               {column.slice(0, status === "Entregado" ? 5 : undefined).map((s) => {
                 const sale = sales.find((x) => x.id === s.saleId);
-                const owner = getOwner(s.ownerRut);
+                const owner = owners.find((o) => o.rut === s.ownerRut);
                 return (
                   <Card key={s.id} className="gap-2 py-3">
                     <CardContent className="flex flex-col gap-1.5 px-3 text-sm">

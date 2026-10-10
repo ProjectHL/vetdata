@@ -27,19 +27,21 @@ import {
 } from "@/components/ui/select";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { doctors as allDoctors, getOwner, getPatient, patients, rooms as allRooms } from "@/lib/lookups";
 import { type Appointment, SLOTS } from "@/domain/appointments";
 import { ownerName } from "@/domain/owners";
 import { NOW_TIME, TODAY, addDays, formatDate, formatRut, minutesSince } from "@/lib/format";
 import { type AppointmentStage, appointmentStage, stageStyle } from "@/lib/metrics/day";
 import { useSecurity } from "@/lib/security-store";
+import { read } from "@/lib/server-state";
+import { doctors as mockDoctors } from "@/mocks/clinic";
+import { owners as mockOwners } from "@/mocks/owners";
+import { patients as mockPatients } from "@/mocks/patients";
 import { useCan, useCanView, useDoctors, useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
 
 const WEEKDAYS = ["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"];
 const weekday = (iso: string) => new Date(`${iso}T12:00:00Z`).getUTCDay();
 const ROW = 56; // alto de cada bloque de 30 min (px)
-const boxes = allRooms.filter((r) => r.kind === "box");
 
 function useStage() {
   const { rooms } = useStore();
@@ -136,10 +138,11 @@ function DayView({
   onSelect: (id: string) => void;
   onSlot: (s: { doctorId: string; date: string; time: string }) => void;
 }) {
-  const { appointments } = useStore();
+  const { appointments, rooms } = useStore();
   const doctors = useDoctors();
   const can = useCan();
   const stage = useStage();
+  const patients = read("patients", mockPatients);
   const dayAppts = appointments.filter((a) => a.date === date);
   const nowOffset = (minutesSince("09:00", NOW_TIME) / 30) * ROW;
   const showNow = date === TODAY && nowOffset >= 0 && nowOffset <= SLOTS.length * ROW;
@@ -181,7 +184,7 @@ function DayView({
                 const past = date < TODAY || (date === TODAY && minutesSince(t, NOW_TIME) >= 30);
                 if (appt) {
                   const s = stage(appt);
-                  const p = getPatient(appt.patientId);
+                    const p = patients.find((x) => x.id === appt.patientId);
                   return (
                     <div key={t} className="border-b p-1" style={{ height: ROW }}>
                       <button
@@ -194,7 +197,7 @@ function DayView({
                           <span className="truncate">{p?.name}</span>
                         </span>
                         <span className="truncate text-muted-foreground">{appt.reason}</span>
-                        <span className="truncate">{s} · {allRooms.find((r) => r.id === appt.roomId)?.name}</span>
+                        <span className="truncate">{s} · {rooms.find((r) => r.id === appt.roomId)?.name}</span>
                       </button>
                     </div>
                   );
@@ -235,6 +238,8 @@ function WeekView({
 }) {
   const { appointments } = useStore();
   const stage = useStage();
+  const patients = read("patients", mockPatients);
+  const allDoctors = read("doctors", mockDoctors);
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
 
   return (
@@ -252,7 +257,7 @@ function WeekView({
               </button>
               {list.length === 0 && <p className="text-xs text-muted-foreground">Sin citas</p>}
               {list.map((a) => {
-                const p = getPatient(a.patientId);
+                const p = patients.find((x) => x.id === a.patientId);
                 return (
                   <button
                     key={a.id}
@@ -278,11 +283,14 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
   const { waiting, checkIn, callFromWaiting } = useSecurity();
   const doctors = useDoctors();
   const stage = useStage();
+  const patients = read("patients", mockPatients);
+  const owners = read("owners", mockOwners);
+  const allDoctors = read("doctors", mockDoctors);
   const [resched, setResched] = useState<{ date: string; time: string; doctorId: string } | null>(null);
   const [box, setBox] = useState("");
 
-  const p = a ? getPatient(a.patientId) : undefined;
-  const owner = p ? getOwner(p.ownerRut) : undefined;
+  const p = a ? patients.find((x) => x.id === a.patientId) : undefined;
+  const owner = p ? owners.find((o) => o.rut === p.ownerRut) : undefined;
   const s = a ? stage(a) : undefined;
   const wait = a ? waiting.find((w) => w.appointmentId === a.id) : undefined;
   const freeBoxes = rooms.filter((r) => r.kind === "box" && r.status === "disponible");
@@ -301,7 +309,7 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
                 <SpeciesIcon species={p.species} className="size-5 text-primary" /> {p.name}
               </SheetTitle>
               <SheetDescription>
-                {formatDate(a.date)} · {a.time} · {allDoctors.find((d) => d.id === a.doctorId)?.name} · {allRooms.find((r) => r.id === a.roomId)?.name}
+                {formatDate(a.date)} · {a.time} · {allDoctors.find((d) => d.id === a.doctorId)?.name} · {rooms.find((r) => r.id === a.roomId)?.name}
               </SheetDescription>
             </SheetHeader>
             <div className="flex flex-col gap-4 px-4 pb-6 text-sm">
@@ -419,8 +427,12 @@ function AppointmentSheet({ appointment: a, onClose }: { appointment?: Appointme
 }
 
 function NewAppointmentDialog({ slot, onClose }: { slot: { doctorId: string; date: string; time: string } | null; onClose: () => void }) {
-  const { addAppointment } = useStore();
+  const { addAppointment, rooms } = useStore();
   const canView = useCanView();
+  const patients = read("patients", mockPatients);
+  const owners = read("owners", mockOwners);
+  const allDoctors = read("doctors", mockDoctors);
+  const boxes = rooms.filter((r) => r.kind === "box");
   const [patientId, setPatientId] = useState("");
   const [reason, setReason] = useState("");
   const [roomId, setRoomId] = useState(boxes[0].id);
@@ -441,7 +453,7 @@ function NewAppointmentDialog({ slot, onClose }: { slot: { doctorId: string; dat
                   <SelectTrigger className="w-full"><SelectValue placeholder="Selecciona mascota" /></SelectTrigger>
                   <SelectContent>
                     {patients.filter((p) => canView(p.id)).map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name} · {p.species} · {ownerName(getOwner(p.ownerRut)!)}</SelectItem>
+                      <SelectItem key={p.id} value={p.id}>{p.name} · {p.species} · {ownerName(owners.find((o) => o.rut === p.ownerRut)!)}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>

@@ -17,10 +17,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { doctors, getPatient, medications, rooms } from "@/lib/lookups";
 import type { AppointmentStatus } from "@/domain/appointments";
 import type { Invoice } from "@/domain/invoices";
 import { TODAY, formatCLP, formatDate } from "@/lib/format";
+import { read } from "@/lib/server-state";
+import { doctors as mockDoctors } from "@/mocks/clinic";
+import { patients as mockPatients } from "@/mocks/patients";
 import { useStore } from "@/lib/store";
 import { InvoicePreview } from "./invoice-form";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -41,7 +43,9 @@ function Empty({ text }: { text: string }) {
 type Props = { patientIds: string[]; showPatient?: boolean };
 
 export function AppointmentsTable({ patientIds, showPatient }: Props) {
-  const { appointments } = useStore();
+  const { appointments, rooms } = useStore();
+  const patients = read("patients", mockPatients);
+  const doctors = read("doctors", mockDoctors);
   const rows = appointments
     .filter((a) => patientIds.includes(a.patientId))
     .sort((a, b) => (b.date + b.time).localeCompare(a.date + a.time));
@@ -62,7 +66,7 @@ export function AppointmentsTable({ patientIds, showPatient }: Props) {
         {rows.map((a) => (
           <TableRow key={a.id} className={a.date < TODAY ? "text-muted-foreground" : undefined}>
             <TableCell className="tabular-nums">{formatDate(a.date)} · {a.time}</TableCell>
-            {showPatient && <TableCell className="font-medium">{getPatient(a.patientId)?.name}</TableCell>}
+            {showPatient && <TableCell className="font-medium">{patients.find((p) => p.id === a.patientId)?.name}</TableCell>}
             <TableCell>{doctors.find((d) => d.id === a.doctorId)?.name}</TableCell>
             <TableCell>{rooms.find((r) => r.id === a.roomId)?.name ?? "—"}</TableCell>
             <TableCell>{a.reason}</TableCell>
@@ -76,12 +80,13 @@ export function AppointmentsTable({ patientIds, showPatient }: Props) {
 
 export function InvoicesTable({ patientIds, showPatient }: Props) {
   const { invoices } = useStore();
+  const patients = read("patients", mockPatients);
   const [open, setOpen] = useState<Invoice | null>(null);
   const rows = invoices
     .filter((i) => patientIds.includes(i.patientId))
     .sort((a, b) => b.folio - a.folio);
   if (rows.length === 0) return <Empty text="Sin facturas emitidas." />;
-  const openPatient = open ? getPatient(open.patientId) : undefined;
+  const openPatient = open ? patients.find((p) => p.id === open.patientId) : undefined;
   return (
     <>
       <Table>
@@ -101,7 +106,7 @@ export function InvoicesTable({ patientIds, showPatient }: Props) {
             <TableRow key={i.id}>
               <TableCell className="font-medium tabular-nums">N° {i.folio}</TableCell>
               <TableCell className="tabular-nums">{formatDate(i.date)}</TableCell>
-              {showPatient && <TableCell>{getPatient(i.patientId)?.name}</TableCell>}
+              {showPatient && <TableCell>{patients.find((p) => p.id === i.patientId)?.name}</TableCell>}
               <TableCell className="max-w-56 truncate text-muted-foreground">
                 {i.items.map((x) => x.description).join(", ")}
               </TableCell>
@@ -129,7 +134,9 @@ export function InvoicesTable({ patientIds, showPatient }: Props) {
 }
 
 export function ReferralsTable({ patientIds, showPatient }: Props) {
-  const { referrals } = useStore();
+  const { referrals, medications } = useStore();
+  const patients = read("patients", mockPatients);
+  const doctors = read("doctors", mockDoctors);
   const rows = referrals
     .filter((r) => patientIds.includes(r.patientId))
     .sort((a, b) => b.date.localeCompare(a.date));
@@ -150,7 +157,7 @@ export function ReferralsTable({ patientIds, showPatient }: Props) {
         {rows.map((r) => (
           <TableRow key={r.id}>
             <TableCell className="tabular-nums">{formatDate(r.date)}</TableCell>
-            {showPatient && <TableCell className="font-medium">{getPatient(r.patientId)?.name}</TableCell>}
+            {showPatient && <TableCell className="font-medium">{patients.find((p) => p.id === r.patientId)?.name}</TableCell>}
             <TableCell>{r.destination}</TableCell>
             <TableCell className="whitespace-normal">
               <ul className="flex flex-col gap-0.5">

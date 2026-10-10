@@ -25,17 +25,19 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { getOwner } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { CATEGORIES, PAYMENT_METHODS, type Sale } from "@/domain/retail";
 import { TODAY, formatCLP, formatDate } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
+import { read } from "@/lib/server-state";
+import { owners as mockOwners } from "@/mocks/owners";
 import { Receipt } from "./receipt";
 
 const salesConfig = { value: { label: "Ventas", color: "var(--viz-1)" } } satisfies ChartConfig;
 
 export function SalesReport() {
   const { sales, products } = useRetail();
+  const owners = read("owners", mockOwners);
   const [channel, setChannel] = useState("all");
   const [payment, setPayment] = useState("all");
   const [open, setOpen] = useState<Sale | null>(null);
@@ -190,7 +192,7 @@ export function SalesReport() {
             </TableHeader>
             <TableBody>
               {rows.map((s) => {
-                const owner = s.ownerRut ? getOwner(s.ownerRut) : undefined;
+                const owner = s.ownerRut ? owners.find((o) => o.rut === s.ownerRut) : undefined;
                 return (
                   <TableRow key={s.id}>
                     <TableCell className="font-medium tabular-nums">{s.number}</TableCell>
