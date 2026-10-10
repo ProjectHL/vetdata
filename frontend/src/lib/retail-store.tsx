@@ -24,7 +24,7 @@ import {
 } from "@/mocks/retail";
 import { owners as mockOwners } from "@/mocks/owners";
 import { publish, read } from "@/lib/server-state";
-import { dataSource, runInBackground, services } from "@/services";
+import { dataSource, newIdempotencyKey, runInBackground, services } from "@/services";
 import { NOW_TIME, TODAY, addDays } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -134,7 +134,9 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
     void load();
   };
 
+  /** Registra movimientos y aplica el delta al stock. Devuelve los creados (para revertir en modo http). */
   const record = (list: Omit<RetailMovement, "id" | "date" | "user">[]) => {
+    if (list.length === 0) return [];
     const created = list.map((m) => ({ ...m, id: newId("rm"), date: TODAY, user: currentUser.name }));
     setMovements((prev) => [...prev, ...created]);
     setProducts((prev) =>
@@ -153,6 +155,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
         return { ...p, stock };
       })
     );
+    return created;
   };
 
   const store: RetailStore = {
@@ -178,31 +181,93 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
         channel: "Mesón",
       };
       setSales((prev) => [...prev, sale]);
-      record(items.map((i) => ({ productId: i.productId, type: "Salida", reason: "Venta", location: "sala", qty: -i.qty, ref: `Boleta ${sale.number}` })));
+      const createdMovements = record(items.map((i) => ({ productId: i.productId, type: "Salida", reason: "Venta", location: "sala", qty: -i.qty, ref: `Boleta ${sale.number}` })));
+      let shipmentId: string | null = null;
       if (delivery && owner) {
-        setShipments((prev) => [
-          ...prev,
-          {
-            id: newId("sh"),
-            saleId: sale.id,
-            ownerRut: owner.rut,
-            address: owner.address,
-            sector: owner.sector,
-            courier: delivery.courier,
-            scheduledFor: addDays(TODAY, 1),
-            status: "Por preparar",
-          },
-        ]);
+        const shipment: Shipment = {
+          id: newId("sh"),
+          saleId: sale.id,
+          ownerRut: owner.rut,
+          address: owner.address,
+          sector: owner.sector,
+          courier: delivery.courier,
+          scheduledFor: addDays(TODAY, 1),
+          status: "Por preparar",
+        };
+        shipmentId = shipment.id;
+        setShipments((prev) => [...prev, shipment]);
       }
-      runInBackground(services.retail.checkout({ items, ownerRut, payment, delivery }));
+      const input = { items, ownerRut, payment, delivery };
+      if (dataSource !== "http") {
+        runInBackground(services.retail.checkout(input));
+        return sale;
+      }
+      // T5-4: UNA key por venta; se reconcilian venta y despacho canónicos, al fallar se revierte todo.
+      newIdempotencyKey();
+      const movementIds = new Set(createdMovements.map((m) => m.id));
+      runInBackground(
+        services.retail.checkout(input).then(
+          ({ sale: savedSale, shipment: savedShipment }) => {
+            setSales((prev) => prev.map((s) => (s.id === sale.id ? savedSale : s)));
+            setShipments((prev) => {
+              const withoutOptimistic = shipmentId ? prev.filter((sh) => sh.id !== shipmentId) : prev;
+              return savedShipment
+                ? [...withoutOptimistic.filter((sh) => sh.id !== savedShipment.id), savedShipment]
+                : withoutOptimistic;
+            });
+          },
+          () => {
+            setSales((prev) => prev.filter((s) => s.id !== sale.id));
+            setMovements((prev) => prev.filter((m) => !movementIds.has(m.id)));
+            setProducts((prev) =>
+              prev.map((p) => {
+                const back = createdMovements
+                  .filter((m) => m.productId === p.id)
+                  .reduce((sum, m) => sum + m.qty, 0);
+                if (!back) return p;
+                const stock = { ...p.stock };
+                stock.sala = Math.max(0, stock.sala - back);
+                return { ...p, stock };
+              })
+            );
+            if (shipmentId) setShipments((prev) => prev.filter((sh) => sh.id !== shipmentId));
+            setError("No se pudo registrar la venta. Se revirtieron los movimientos.");
+          }
+        )
+      );
       return sale;
     },
     transferToSala: (productId, qty) => {
-      record([{ productId, type: "Transferencia", reason: "Reposición sala", location: "sala", from: "central", qty }]);
-      runInBackground(services.retail.transferToSala(productId, qty));
+      const createdMovements = record([{ productId, type: "Transferencia", reason: "Reposición sala", location: "sala", from: "central", qty }]);
+      const movementId = createdMovements[0]?.id;
+      if (dataSource !== "http" || !movementId) {
+        runInBackground(services.retail.transferToSala(productId, qty));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.retail.transferToSala(productId, qty).then(
+          (saved) => setMovements((prev) => prev.map((m) => (m.id === movementId ? saved : m))),
+          () => {
+            setMovements((prev) => prev.filter((m) => m.id !== movementId));
+            setProducts((prev) =>
+              prev.map((p) => {
+                if (p.id !== productId) return p;
+                const stock = { ...p.stock };
+                stock.central += qty;
+                stock.sala = Math.max(0, stock.sala - qty);
+                return { ...p, stock };
+              })
+            );
+            setError("No se pudo transferir el stock a sala. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     adjust: (productId, location, qty, reason) => {
       record([{ productId, type: "Ajuste", reason, location, qty }]);
+      // T5-4: POST /api/v1/retail/adjustments aún NotImplemented (exige lotId);
+      // se conserva el optimista local sin key ni reconcile.
       runInBackground(services.retail.adjust({ productId, location, qty, reason }));
     },
     createOrder: (supplierId, items, leadTimeDays) => {
@@ -216,29 +281,73 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
         status: "Borrador",
       };
       setOrders((prev) => [...prev, order]);
-      runInBackground(services.retail.createOrder({ supplierId, items, leadTimeDays }));
+      if (dataSource !== "http") {
+        runInBackground(services.retail.createOrder({ supplierId, items, leadTimeDays }));
+        return order;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.retail.createOrder({ supplierId, items, leadTimeDays }).then(
+          (saved) => setOrders((prev) => prev.map((o) => (o.id === order.id ? saved : o))),
+          () => {
+            setOrders((prev) => prev.filter((o) => o.id !== order.id));
+            setError("No se pudo crear la orden de compra. Se descartó el cambio local.");
+          }
+        )
+      );
       return order;
     },
     sendOrder: (id) => {
-      setOrders((prev) => prev.map((o) => (o.id === id && o.status === "Borrador" ? { ...o, status: "Enviada" } : o)));
-      runInBackground(services.retail.sendOrder(id));
+      const prev = orders.find((o) => o.id === id);
+      setOrders((prevList) => prevList.map((o) => (o.id === id && o.status === "Borrador" ? { ...o, status: "Enviada" } : o)));
+      if (dataSource !== "http" || !prev) {
+        runInBackground(services.retail.sendOrder(id));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.retail.sendOrder(id).then(
+          (saved) => setOrders((prevList) => prevList.map((o) => (o.id === saved.id ? saved : o))),
+          () => {
+            setOrders((prevList) => prevList.map((o) => (o.id === id ? prev : o)));
+            setError("No se pudo enviar la orden de compra. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     receiveOrder: (id) => {
       const order = orders.find((o) => o.id === id);
       if (!order || order.status !== "Enviada") return;
       record(order.items.map((i) => ({ productId: i.productId, type: "Entrada", reason: "Compra", location: "central", qty: i.qty, ref: `OC ${order.number}` })));
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "Recibida", receivedAt: TODAY } : o)));
+      // T5-4: POST /api/v1/retail/purchase-orders/:id/receive aún NotImplemented
+      // (exige body items con lote/vencimiento); se conserva el optimista sin key ni reconcile.
       runInBackground(services.retail.receiveOrder(id));
     },
     advanceShipment: (id) => {
-      setShipments((prev) =>
-        prev.map((s) => {
+      const prev = shipments.find((s) => s.id === id);
+      const next = prev ? SHIPMENT_FLOW[SHIPMENT_FLOW.indexOf(prev.status) + 1] : undefined;
+      setShipments((prevList) =>
+        prevList.map((s) => {
           if (s.id !== id) return s;
-          const next = SHIPMENT_FLOW[SHIPMENT_FLOW.indexOf(s.status) + 1];
-          return next ? { ...s, status: next } : s;
+          const nextStatus = SHIPMENT_FLOW[SHIPMENT_FLOW.indexOf(s.status) + 1];
+          return nextStatus ? { ...s, status: nextStatus } : s;
         })
       );
-      runInBackground(services.retail.advanceShipment(id));
+      if (dataSource !== "http" || !prev || !next) {
+        runInBackground(services.retail.advanceShipment(id));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.retail.advanceShipment(id).then(
+          (saved) => setShipments((prevList) => prevList.map((s) => (s.id === saved.id ? saved : s))),
+          () => {
+            setShipments((prevList) => prevList.map((s) => (s.id === id ? prev : s)));
+            setError("No se pudo avanzar el despacho. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     loading,
     error,

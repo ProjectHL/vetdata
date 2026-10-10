@@ -5,7 +5,7 @@ import type { Idea, Release, Ticket, TicketCategory, TicketPriority, TicketStatu
 import { seedIdeas, seedTickets, releases as mockReleases } from "@/mocks/support";
 import { currentClinic as mockCurrentClinic } from "@/mocks/network";
 import { publish, read, readScalar } from "@/lib/server-state";
-import { dataSource, runInBackground, services } from "@/services";
+import { dataSource, newIdempotencyKey, runInBackground, services } from "@/services";
 import { NOW_ISO } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -118,25 +118,80 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
     ideas,
     createTicket: (input) => {
       const ticket = addTicket(input);
-      runInBackground(services.support.createTicket(input));
+      if (dataSource !== "http") {
+        runInBackground(services.support.createTicket(input));
+        return ticket;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.support.createTicket(input).then(
+          (saved) => update(ticket.id, () => saved),
+          () => {
+            setTickets((prev) => prev.filter((t) => t.id !== ticket.id));
+            setError("No se pudo crear el ticket. Se descartó el cambio local.");
+          }
+        )
+      );
       return ticket;
     },
     replyTicket: (id, body) => {
+      const prev = tickets.find((t) => t.id === id);
       update(id, (t) => ({
         ...t,
         // Si soporte esperaba al cliente, la respuesta lo devuelve a "En progreso".
         status: t.status === "Esperando cliente" ? "En progreso" : t.status,
         messages: [...t.messages, { author: currentUser.name, side: "Clínica", body, at: NOW_ISO }],
       }));
-      runInBackground(services.support.reply(id, body));
+      if (dataSource !== "http" || !prev) {
+        runInBackground(services.support.reply(id, body));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.support.reply(id, body).then(
+          (saved) => update(id, () => saved),
+          () => {
+            update(id, () => prev);
+            setError("No se pudo enviar la respuesta. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     changeStatus: (id, status) => {
+      const prev = tickets.find((t) => t.id === id);
       update(id, (t) => ({ ...t, status }));
-      runInBackground(services.support.changeStatus(id, status));
+      if (dataSource !== "http" || !prev) {
+        runInBackground(services.support.changeStatus(id, status));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.support.changeStatus(id, status).then(
+          (saved) => update(id, () => saved),
+          () => {
+            update(id, () => prev);
+            setError("No se pudo cambiar el estado del ticket. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     rateTicket: (id, rating) => {
+      const prev = tickets.find((t) => t.id === id);
       update(id, (t) => ({ ...t, rating, status: "Cerrado" }));
-      runInBackground(services.support.rate(id, rating));
+      if (dataSource !== "http" || !prev) {
+        runInBackground(services.support.rate(id, rating));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.support.rate(id, rating).then(
+          (saved) => update(id, () => saved),
+          () => {
+            update(id, () => prev);
+            setError("No se pudo calificar el ticket. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     // Solo demo: simula la respuesta del equipo de VetData. Sin operación de
     // servicio; con backend real las respuestas llegan al recargar el ticket.
@@ -151,16 +206,51 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
         ],
       })),
     voteIdea: (id) => {
-      setIdeas((prev) =>
-        prev.map((i) => (i.id === id ? { ...i, votedByMe: !i.votedByMe, votes: i.votes + (i.votedByMe ? -1 : 1) } : i))
+      const prev = ideas.find((i) => i.id === id);
+      setIdeas((prevIdeas) =>
+        prevIdeas.map((i) => (i.id === id ? { ...i, votedByMe: !i.votedByMe, votes: i.votes + (i.votedByMe ? -1 : 1) } : i))
       );
-      runInBackground(services.support.vote(id));
+      if (dataSource !== "http" || !prev) {
+        runInBackground(services.support.vote(id));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.support.vote(id).then(
+          (saved) => setIdeas((prevIdeas) => prevIdeas.map((i) => (i.id === saved.id ? saved : i))),
+          () => {
+            setIdeas((prevIdeas) => prevIdeas.map((i) => (i.id === id ? prev : i)));
+            setError("No se pudo registrar el voto. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     proposeIdea: ({ title, description, module }) => {
       const idea: Idea = { id: newId("id"), title, description, module, status: "En evaluación", votes: 1, votedByMe: true, proposedBy: readScalar("currentClinic", mockCurrentClinic) };
       setIdeas((prev) => [...prev, idea]);
-      runInBackground(services.support.proposeIdea({ title, description, module }));
-      return addTicket({ title, category: "Mejora", priority: "Baja", module, body: description, route: "/soporte/mejoras", ideaId: idea.id });
+      const ticketInput = { title, category: "Mejora" as const, priority: "Baja" as const, module, body: description, route: "/soporte/mejoras", ideaId: idea.id };
+      if (dataSource !== "http") {
+        runInBackground(services.support.proposeIdea({ title, description, module }));
+        return addTicket(ticketInput);
+      }
+      // T5-4: UNA key por propuesta; el servidor devuelve {idea, ticket} canónicos
+      // (el ticket ya enlaza el id canónico de la idea).
+      const ticket = addTicket(ticketInput);
+      newIdempotencyKey();
+      runInBackground(
+        services.support.proposeIdea({ title, description, module }).then(
+          ({ idea: savedIdea, ticket: savedTicket }) => {
+            setIdeas((prev) => prev.map((i) => (i.id === idea.id ? savedIdea : i)));
+            setTickets((prev) => prev.map((t) => (t.id === ticket.id ? savedTicket : t)));
+          },
+          () => {
+            setIdeas((prev) => prev.filter((i) => i.id !== idea.id));
+            setTickets((prev) => prev.filter((t) => t.id !== ticket.id));
+            setError("No se pudo proponer la mejora. Se descartaron los cambios locales.");
+          }
+        )
+      );
+      return ticket;
     },
     loading,
     error,

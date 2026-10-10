@@ -28,7 +28,7 @@ import {
 import { owners as mockOwners } from "@/mocks/owners";
 import { patients as mockPatients } from "@/mocks/patients";
 import { read } from "@/lib/server-state";
-import { dataSource, runInBackground, services } from "@/services";
+import { dataSource, newIdempotencyKey, runInBackground, services } from "@/services";
 import { NOW_ISO, NOW_TIME } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -75,7 +75,7 @@ function getOwner(rut: string) {
 }
 
 export function SecurityProvider({ children }: { children: React.ReactNode }) {
-  const { currentUser, role, appointments, updateRoom } = useStore();
+  const { currentUser, role, appointments, rooms, updateRoom } = useStore();
   // Sin endpoints en el backend (NotImplemented: cámaras, dispositivos, NVR, auditoría): se conserva la semilla mock.
   const [cameras, setCameras] = useState(seedCameras);
   const [devices, setDevices] = useState(seedDevices);
@@ -131,18 +131,46 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
     audit,
     settings,
     updateEvent: (id, patch) => {
-      setEvents((prev) =>
-        prev.map((e) =>
+      const prev = events.find((e) => e.id === id);
+      setEvents((prevList) =>
+        prevList.map((e) =>
           e.id === id
             ? { ...e, ...patch, resolvedAt: patch.status === "Resuelto" || patch.status === "Falsa alarma" ? NOW_ISO : e.resolvedAt }
             : e
         )
       );
-      runInBackground(services.security.updateEvent(id, patch));
+      if (dataSource !== "http" || !prev) {
+        runInBackground(services.security.updateEvent(id, patch));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.security.updateEvent(id, patch).then(
+          (saved) => setEvents((prevList) => prevList.map((e) => (e.id === saved.id ? saved : e))),
+          () => {
+            setEvents((prevList) => prevList.map((e) => (e.id === id ? prev : e)));
+            setError("No se pudo actualizar el evento. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     addEventNote: (id, text) => {
-      setEvents((prev) => prev.map((e) => (e.id === id ? { ...e, notes: [...e.notes, { by: currentUser.name, at: NOW_ISO, text }] } : e)));
-      runInBackground(services.security.addEventNote(id, text));
+      const prev = events.find((e) => e.id === id);
+      setEvents((prevList) => prevList.map((e) => (e.id === id ? { ...e, notes: [...e.notes, { by: currentUser.name, at: NOW_ISO, text }] } : e)));
+      if (dataSource !== "http" || !prev) {
+        runInBackground(services.security.addEventNote(id, text));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.security.addEventNote(id, text).then(
+          (saved) => setEvents((prevList) => prevList.map((e) => (e.id === saved.id ? saved : e))),
+          () => {
+            setEvents((prevList) => prevList.map((e) => (e.id === id ? prev : e)));
+            setError("No se pudo agregar la nota. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     createEvent: ({ zone, cameraId, type, severity, note }) => {
       const event: SecurityEvent = {
@@ -156,19 +184,38 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
         notes: note ? [{ by: currentUser.name, at: NOW_ISO, text: note }] : [],
       };
       setEvents((prev) => [event, ...prev]);
-      runInBackground(services.security.createEvent({ zone, cameraId, type, severity, note }));
+      if (dataSource !== "http") {
+        runInBackground(services.security.createEvent({ zone, cameraId, type, severity, note }));
+        return event;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.security.createEvent({ zone, cameraId, type, severity, note }).then(
+          (saved) => setEvents((prev) => prev.map((e) => (e.id === event.id ? saved : e))),
+          () => {
+            setEvents((prev) => prev.filter((e) => e.id !== event.id));
+            setError("No se pudo crear el evento. Se descartó el cambio local.");
+          }
+        )
+      );
       return event;
     },
     logAudit: (cameraId, action, reason) => {
       setAudit((prev) => [{ id: newId("au"), at: NOW_ISO, user: currentUser.name, role, action, cameraId, reason }, ...prev]);
+      // T5-4: POST /api/v1/security/audit aún NotImplemented (la auditoría la genera el
+      // servidor al ejecutar cada acción); se conserva el optimista sin key ni reconcile.
       runInBackground(services.security.logAudit({ cameraId, action, reason }));
     },
     toggleLock: (deviceId) => {
       setDevices((prev) => prev.map((d) => (d.id === deviceId ? { ...d, locked: !d.locked } : d)));
+      // T5-4: POST /api/v1/security/devices/:id/toggle-lock aún NotImplemented (sin endpoint
+      // en el backend); se conserva el optimista sin key ni reconcile.
       runInBackground(services.security.toggleLock(deviceId));
     },
     setAlarm: (armed) => {
       setSettings((prev) => ({ ...prev, alarmArmed: armed }));
+      // T5-4: PUT /api/v1/security/alarm aún NotImplemented (sin endpoint en el backend);
+      // se conserva el optimista sin key ni reconcile.
       runInBackground(services.security.setAlarm(armed));
     },
     checkIn: (appointmentId) => {
@@ -176,38 +223,86 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
       const patient = appt && getPatient(appt.patientId);
       const owner = patient && getOwner(patient.ownerRut);
       if (!appt || !patient || !owner || waiting.some((w) => w.appointmentId === appointmentId)) return;
-      setAccess((prev) => [
-        ...prev,
-        {
-          id: newId("ac"),
-          time: NOW_TIME,
-          direction: "Ingreso",
-          kind: "Cliente",
-          who: ownerName(owner),
-          detail: `${patient.name} · ${appt.reason.toLowerCase()}`,
-          ownerRut: owner.rut,
-          patientId: patient.id,
-          appointmentId,
-        },
-      ]);
-      setWaiting((prev) => [...prev, { id: newId("w"), appointmentId, arrivedAt: NOW_TIME, people: 1 }]);
-      runInBackground(services.security.checkIn(appointmentId));
+      const accessEntry: AccessEntry = {
+        id: newId("ac"),
+        time: NOW_TIME,
+        direction: "Ingreso",
+        kind: "Cliente",
+        who: ownerName(owner),
+        detail: `${patient.name} · ${appt.reason.toLowerCase()}`,
+        ownerRut: owner.rut,
+        patientId: patient.id,
+        appointmentId,
+      };
+      const waitingEntry: WaitingEntry = { id: newId("w"), appointmentId, arrivedAt: NOW_TIME, people: 1 };
+      setAccess((prev) => [...prev, accessEntry]);
+      setWaiting((prev) => [...prev, waitingEntry]);
+      if (dataSource !== "http") {
+        runInBackground(services.security.checkIn(appointmentId));
+        return;
+      }
+      // T5-4: UNA key por check-in; se reconcilian acceso y espera canónicos.
+      newIdempotencyKey();
+      runInBackground(
+        services.security.checkIn(appointmentId).then(
+          ({ access, waiting }) => {
+            setAccess((prev) => prev.map((a) => (a.id === accessEntry.id ? access : a)));
+            setWaiting((prev) => prev.map((w) => (w.id === waitingEntry.id ? waiting : w)));
+          },
+          () => {
+            setAccess((prev) => prev.filter((a) => a.id !== accessEntry.id));
+            setWaiting((prev) => prev.filter((w) => w.id !== waitingEntry.id));
+            setError("No se pudo registrar el ingreso. Se descartó el cambio local.");
+          }
+        )
+      );
     },
     callFromWaiting: (entryId, roomId) => {
       const entry = waiting.find((w) => w.id === entryId);
       const appt = entry && appointments.find((a) => a.id === entry.appointmentId);
       if (!entry || !appt) return;
+      const prevRoom = rooms.find((r) => r.id === roomId);
       // Solo estado local del mapa: el backend ocupa el box dentro de callFromWaiting.
       updateRoom(roomId, { status: "ocupado", doctorId: appt.doctorId, patientId: appt.patientId, since: NOW_TIME }, { sync: false });
       setWaiting((prev) => prev.filter((w) => w.id !== entryId));
-      runInBackground(services.security.callFromWaiting(entryId, roomId));
+      if (dataSource !== "http" || !prevRoom) {
+        runInBackground(services.security.callFromWaiting(entryId, roomId));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.security.callFromWaiting(entryId, roomId).then(
+          ({ room }) => updateRoom(room.id, room, { sync: false }),
+          () => {
+            updateRoom(roomId, prevRoom, { sync: false });
+            setWaiting((prev) => [...prev, entry]);
+            setError("No se pudo llamar al paciente. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     updateSettings: (patch) => {
-      setSettings((prev) => ({ ...prev, ...patch }));
-      runInBackground(services.security.updateSettings(patch));
+      const prev = settings;
+      setSettings((prevSettings) => ({ ...prevSettings, ...patch }));
+      if (dataSource !== "http") {
+        runInBackground(services.security.updateSettings(patch));
+        return;
+      }
+      newIdempotencyKey();
+      runInBackground(
+        services.security.updateSettings(patch).then(
+          (saved) => setSettings(saved),
+          () => {
+            setSettings(prev);
+            setError("No se pudo guardar la configuración. Se restauró el estado anterior.");
+          }
+        )
+      );
     },
     setCameraStatus: (id, status) => {
       setCameras((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
+      // T5-4: PATCH /api/v1/security/cameras/:id aún NotImplemented (sin endpoint en el
+      // backend); se conserva el optimista sin key ni reconcile.
       runInBackground(services.security.setCameraStatus(id, status));
     },
     loading,
