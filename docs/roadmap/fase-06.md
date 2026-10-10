@@ -8,7 +8,7 @@ Cerrar los riesgos de concurrencia, autorización y seguridad antes del piloto.
 
 **Dependencia:** Fase 5 validada.
 
-**Estado inicial:** pendiente. Esta página especifica trabajo futuro; sus pruebas y entregables no están acreditados por existir el documento.
+**Estado:** validada técnicamente. Evidencia en [cierre-fase-06.md](cierre-fase-06.md).
 
 ## Paquetes de trabajo
 
@@ -16,11 +16,11 @@ Ejecutar primero contratos y migraciones del paquete, luego reglas/servicios/han
 
 | Tarea | Decisiones / referencia | Estado | Entregable | Evidencia de aceptación |
 |---|---|---|---|---|
-| T6-1 | T6-1 | pendiente | Consolidar las doce operaciones atómicas de transversales y las añadidas por consentimiento/pagos/recepciones. | Fallo inyectado en cada efecto deja rollback completo; pruebas concurrentes aprobadas. |
-| T6-2 | T6-2 | pendiente | PATCH con lista blanca, transiciones 409, estado deseado en toggles y errores explícitos. | Campos actor/tenant/totales no controlables; no-op no se presenta como éxito. |
-| T6-3 | p-01, p-07, p-19 | pendiente | 2FA para Admin/cámaras; recuperación, revocación y auditoría de acciones protegidas. | Sin segundo factor no se accede; recuperación no permite saltar el control ni dejar al último Admin bloqueado. |
-| T6-4 | p-02, p-04, p-10 | pendiente | Suite de aislamiento, red, permisos, stock y protección del administrador sobre DB real. | Dos tenants/grupos y todos los roles; pruebas sobre listas, detalle, búsqueda, tareas y analítica. |
-| T6-5 | T6-5 | pendiente | Revisar defectos y cerrar gate de producción. | Suite verde; cero defectos abiertos de filtración, doble operación, stock negativo o escalamiento. |
+| T6-1 | T6-1 | validada | Consolidar las doce operaciones atómicas de transversales y las añadidas por consentimiento/pagos/recepciones. | Fallo inyectado en cada efecto deja rollback completo; pruebas concurrentes aprobadas. |
+| T6-2 | T6-2 | validada | PATCH con lista blanca, transiciones 409, estado deseado en toggles y errores explícitos. | Campos actor/tenant/totales no controlables; no-op no se presenta como éxito. |
+| T6-3 | p-01, p-07, p-19 | validada | 2FA para Admin/cámaras; recuperación, revocación y auditoría de acciones protegidas. | Sin segundo factor no se accede; recuperación no permite saltar el control ni dejar al último Admin bloqueado. |
+| T6-4 | p-02, p-04, p-10 | validada | Suite de aislamiento, red, permisos, stock y protección del administrador sobre DB real. | Dos tenants/grupos y todos los roles; pruebas sobre listas, detalle, búsqueda, tareas y analítica. |
+| T6-5 | T6-5 | validada | Revisar defectos y cerrar gate de producción. | Suite verde; cero defectos abiertos de filtración, doble operación, stock negativo o escalamiento. |
 
 ## Contratos e interfaces
 

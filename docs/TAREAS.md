@@ -74,11 +74,11 @@
 
 ## Fase 6 — Endurecimiento
 
-- [ ] T6-1 Los 12 casos de atomicidad `transversales.md` §8 en transacciones reales
-- [ ] T6-2 PATCH con lista blanca + transiciones 409, toggles con estado deseado, mock "no-op" eliminado
-- [ ] T6-3 2FA Admin/cámaras (p-01), auditoría administrativa/red completa, `tasks` servidor ya hecho
-- [ ] T6-4 Tests: aislamiento tenant + red + permisos + stock no negativo + auto-bloqueo admin
-- [ ] T6-5 Salida fase: suite verde anti-filtración entre clínicas
+- [x] T6-1 Los 12 casos de atomicidad `transversales.md` §8 en transacciones reales
+- [x] T6-2 PATCH con lista blanca + transiciones 409, toggles con estado deseado, mock "no-op" eliminado
+- [x] T6-3 2FA Admin/cámaras (p-01), auditoría administrativa/red completa, `tasks` servidor ya hecho
+- [x] T6-4 Tests: aislamiento tenant + red + permisos + stock no negativo + auto-bloqueo admin
+- [x] T6-5 Salida fase: suite verde anti-filtración entre clínicas
 
 ## Fase 7 — Chile + producción
 

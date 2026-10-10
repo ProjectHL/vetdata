@@ -105,15 +105,15 @@ Suite Docker/Postgres aislada ejecutada con salida 0. [Evidencia, contratos y br
 
 ## Fase 6 — Endurecimiento
 
-[Paquetes y pruebas](fase-06.md). Gate: **pendiente**.
+[Paquetes y pruebas](fase-06.md). Gate: **validado técnicamente**. Evidencia: [cierre-fase-06.md](cierre-fase-06.md).
 
 | Aceptada | Tarea | Estado | Evidencia actual / exigida | Revisión y observaciones |
 |---|---|---|---|---|
-| [ ] | T6-1 | pendiente | Sin evidencia funcional registrada. Exigir: Fallo inyectado en cada efecto deja rollback completo; pruebas concurrentes aprobadas. | Pendiente de revisión. |
-| [ ] | T6-2 | pendiente | Sin evidencia funcional registrada. Exigir: Campos actor/tenant/totales no controlables; no-op no se presenta como éxito. | Pendiente de revisión. |
-| [ ] | T6-3 | pendiente | Sin evidencia funcional registrada. Exigir: Sin segundo factor no se accede; recuperación no permite saltar el control ni dejar al último Admin bloqueado. | Pendiente de revisión. |
-| [ ] | T6-4 | pendiente | Sin evidencia funcional registrada. Exigir: Dos tenants/grupos y todos los roles; pruebas sobre listas, detalle, búsqueda, tareas y analítica. | Pendiente de revisión. |
-| [ ] | T6-5 | pendiente | Sin evidencia funcional registrada. Exigir: Suite verde; cero defectos abiertos de filtración, doble operación, stock negativo o escalamiento. | Pendiente de revisión. |
+| [ ] | T6-1 | validada | Implementación y pruebas en [cierre-fase-06.md](cierre-fase-06.md): 12 ops en tx, `checkoutRetail` owner snapshot en tx, concurrencia/rollback verdes. | Pendiente revisión humana. |
+| [ ] | T6-2 | validada | Implementación y pruebas en [cierre-fase-06.md](cierre-fase-06.md): `{voted}` idempotente, no-op 200, `Lanzada` 409, `decode` campos desconocidos. | Pendiente revisión humana. |
+| [ ] | T6-3 | validada | Implementación y pruebas en [cierre-fase-06.md](cierre-fase-06.md): Admin enrolado requiere challenge 2FA; reset no salta el control; migración 013 aditiva. | Pendiente revisión humana; TOTP/cámaras reales fuera de alcance. |
+| [ ] | T6-4 | validada | Implementación y pruebas en [cierre-fase-06.md](cierre-fase-06.md): gate `isolation_test.go` con dos clínicas, roles, listas/detalle, búsqueda, tareas y analítica. | Pendiente revisión humana. |
+| [ ] | T6-5 | validada | Suite `go test ./... -count=1` verde contra DB real `vetdata-tests`; sin defectos abiertos críticos del alcance. | Pendiente revisión humana. |
 
 ## Fase 7 — Chile y producción
 
