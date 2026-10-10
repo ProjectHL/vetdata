@@ -1,10 +1,10 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { Idea, Ticket, TicketCategory, TicketPriority, TicketStatus } from "@/domain/support";
 import { currentClinic } from "@/lib/lookups";
 import { seedIdeas, seedTickets } from "@/mocks/support";
-import { runInBackground, services } from "@/services";
+import { dataSource, runInBackground, services } from "@/services";
 import { NOW_ISO } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -22,6 +22,11 @@ type SupportStore = {
   voteIdea: (id: string) => void;
   /** Crea la idea en el tablero de la red y su ticket "Mejora" vinculado. */
   proposeIdea: (input: { title: string; description: string; module: string }) => Ticket;
+  // Hidratación desde el servidor (T5-2): en modo mock siempre loading=false y error=null.
+  loading: boolean;
+  error: string | null;
+  /** Reintenta la carga inicial desde el servidor (solo modo http). */
+  retry: () => void;
 };
 
 const SupportContext = createContext<SupportStore | null>(null);
@@ -37,8 +42,41 @@ const REPLIES = [
 
 export function SupportProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, role } = useStore();
-  const [tickets, setTickets] = useState(seedTickets); // TODO(api): reemplazar por services.support.listTickets()
-  const [ideas, setIdeas] = useState(seedIdeas); // TODO(api): reemplazar por services.support.listIdeas()
+  const [tickets, setTickets] = useState(seedTickets); // http: se hidrata con services.support.listTickets()
+  const [ideas, setIdeas] = useState(seedIdeas); // http: se hidrata con services.support.listIdeas()
+
+  // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
+  const [loading, setLoading] = useState(dataSource === "http");
+  const [error, setError] = useState<string | null>(null);
+
+  /** Carga inicial desde el servidor. Si falla, se conserva la semilla y se expone el error. */
+  const load = useCallback(async () => {
+    if (dataSource !== "http") return;
+    try {
+      const [ticketsData, ideasData] = await Promise.all([
+        services.support.listTickets(),
+        services.support.listIdeas(),
+      ]);
+      setTickets(ticketsData);
+      setIdeas(ideasData);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar la información de soporte");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Hidratación inicial al montar: el fetch resuelve en continuaciones async, no es un render en cascada.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount intencional del store en modo http
+    if (dataSource === "http") void load();
+  }, [load]);
+
+  const retry = () => {
+    setLoading(true);
+    setError(null);
+    void load();
+  };
 
   const update = (id: string, fn: (t: Ticket) => Ticket) => setTickets((prev) => prev.map((t) => (t.id === id ? fn(t) : t)));
 
@@ -46,7 +84,7 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
   const addTicket: SupportStore["createTicket"] = ({ title, category, priority, module, body, route, ideaId }) => {
     const ticket: Ticket = {
       id: newId("tk"),
-      number: Math.max(...tickets.map((t) => t.number)) + 1,
+      number: Math.max(0, ...tickets.map((t) => t.number)) + 1,
       title,
       category,
       priority,
@@ -111,6 +149,9 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
       runInBackground(services.support.proposeIdea({ title, description, module }));
       return addTicket({ title, category: "Mejora", priority: "Baja", module, body: description, route: "/soporte/mejoras", ideaId: idea.id });
     },
+    loading,
+    error,
+    retry,
   };
 
   return <SupportContext.Provider value={store}>{children}</SupportContext.Provider>;

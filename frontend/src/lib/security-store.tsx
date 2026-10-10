@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import { ownerName } from "@/domain/owners";
 import type {
   AccessEntry,
@@ -26,7 +26,7 @@ import {
   seedSecuritySettings,
   seedWaiting,
 } from "@/mocks/security";
-import { runInBackground, services } from "@/services";
+import { dataSource, runInBackground, services } from "@/services";
 import { NOW_ISO, NOW_TIME } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -50,6 +50,11 @@ type SecurityStore = {
   callFromWaiting: (entryId: string, roomId: string) => void;
   updateSettings: (patch: Partial<SecuritySettings>) => void;
   setCameraStatus: (id: string, status: CameraStatus) => void;
+  // Hidratación desde el servidor (T5-2): en modo mock siempre loading=false y error=null.
+  loading: boolean;
+  error: string | null;
+  /** Reintenta la carga inicial desde el servidor (solo modo http). */
+  retry: () => void;
 };
 
 const SecurityContext = createContext<SecurityStore | null>(null);
@@ -59,13 +64,51 @@ const newId = (prefix: string) => `${prefix}-new-${++seq}`;
 
 export function SecurityProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, role, appointments, updateRoom } = useStore();
-  const [cameras, setCameras] = useState(seedCameras); // TODO(api): reemplazar por services.security.listCameras()
-  const [devices, setDevices] = useState(seedDevices); // TODO(api): reemplazar por services.security.listDevices()
-  const [events, setEvents] = useState(seedEvents); // TODO(api): reemplazar por services.security.listEvents()
-  const [access, setAccess] = useState(seedAccess); // TODO(api): reemplazar por services.security.listAccess()
-  const [waiting, setWaiting] = useState(seedWaiting); // TODO(api): reemplazar por services.security.listWaiting()
-  const [audit, setAudit] = useState(seedAudit); // TODO(api): reemplazar por services.security.listAudit()
-  const [settings, setSettings] = useState(seedSecuritySettings); // TODO(api): reemplazar por services.security.getSettings()
+  // Sin endpoints en el backend (NotImplemented: cámaras, dispositivos, NVR, auditoría): se conserva la semilla mock.
+  const [cameras, setCameras] = useState(seedCameras);
+  const [devices, setDevices] = useState(seedDevices);
+  const [events, setEvents] = useState(seedEvents); // http: se hidrata con services.security.listEvents()
+  const [access, setAccess] = useState(seedAccess); // http: se hidrata con services.security.listAccess()
+  const [waiting, setWaiting] = useState(seedWaiting); // http: se hidrata con services.security.listWaiting()
+  const [audit, setAudit] = useState(seedAudit);
+  const [settings, setSettings] = useState(seedSecuritySettings); // http: se hidrata con services.security.getSettings()
+
+  // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
+  const [loading, setLoading] = useState(dataSource === "http");
+  const [error, setError] = useState<string | null>(null);
+
+  /** Carga inicial desde el servidor. Si falla, se conserva la semilla y se expone el error. */
+  const load = useCallback(async () => {
+    if (dataSource !== "http") return;
+    try {
+      const [eventsData, accessData, waitingData, settingsData] = await Promise.all([
+        services.security.listEvents(),
+        services.security.listAccess(),
+        services.security.listWaiting(),
+        services.security.getSettings(),
+      ]);
+      setEvents(eventsData);
+      setAccess(accessData);
+      setWaiting(waitingData);
+      setSettings(settingsData);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar la información de seguridad");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Hidratación inicial al montar: el fetch resuelve en continuaciones async, no es un render en cascada.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount intencional del store en modo http
+    if (dataSource === "http") void load();
+  }, [load]);
+
+  const retry = () => {
+    setLoading(true);
+    setError(null);
+    void load();
+  };
 
   const store: SecurityStore = {
     cameras,
@@ -155,6 +198,9 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
       setCameras((prev) => prev.map((c) => (c.id === id ? { ...c, status } : c)));
       runInBackground(services.security.setCameraStatus(id, status));
     },
+    loading,
+    error,
+    retry,
   };
 
   return <SecurityContext.Provider value={store}>{children}</SecurityContext.Provider>;

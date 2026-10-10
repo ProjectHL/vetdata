@@ -15,7 +15,7 @@ El frontend no tiene runner de tests (`dev/build/start/lint` solamente). No hay 
 ## Tareas
 
 - [x] T5-1 `http/client.ts`: auth por cookie (`credentials: include` ya está) + `apiFetch` real; 87 métodos cableados a endpoints de `docs/backend/api.md`, 21 quedan con `NotImplementedError` anotado (sin endpoint o contrato sin datos requeridos: lotId, prescriptionId, cámaras/NVR, alarma, audit POST, sharing-policy, reminders) — firmas intactas, `tsc`+`lint` limpios
-- [ ] T5-2 Hidratar 4 stores (`store`, `retail-store`, `security-store`, `support-store`) con loading/error desde `http` en vez de semilla en memoria
+- [x] T5-2 Hidratar 4 stores (`store`, `retail-store`, `security-store`, `support-store`) con loading/error desde `http` en vez de semilla en memoria
 - [ ] T5-3 Matar `lib/lookups.ts`: migrar 75 archivos consumidores + `tasks.ts` + `analytics/metrics` a estado servidor
 - [ ] T5-4 Reconciliar ids optimistas (`-new-N` → canónico), revertir/avisar en error, `Idempotency-Key` desde UI
 - [ ] T5-5 Fechas reales sin romper hidratación, `currentClinic/currentUser/role` desde sesión
@@ -25,3 +25,4 @@ El frontend no tiene runner de tests (`dev/build/start/lint` solamente). No hay 
 
 - 2026-10-09: documento creado, sin writes aún. Mapa: 10 archivos en `services/http` (todos esqueleto), 4 stores, 75 archivos con `lib/lookups`, 0 imports `@/mocks` en componentes.
 - 2026-10-09: T5-1 cerrada — 87 métodos http vía `apiFetch` (cookie sesión, sin headers extra), 21 faltantes anotados no inventados, `npm run lint` exit 0, `npx tsc --noEmit` exit 0. Riesgo: selects Go traen claves distintas a `src/domain` (cast `apiFetch<T>` compila pero UI puede ver `undefined` hasta T5-3 con adaptadores).
+- 2026-10-09: T5-2 cerrada — 4 stores hidratan en modo `http` con `loading/error/retry`, semilla intacta en `mock` y como estado inicial (protege `currentUser!`); sin adaptadores (http ya devuelve tipos de dominio); `lint`+`tsc` limpios. Pendiente: componentes aún no consumen `loading/error` (sin spinner).

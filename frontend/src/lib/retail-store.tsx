@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import {
   type Location,
   type PaymentMethod,
@@ -21,7 +21,7 @@ import {
   seedRetailOrders,
   seedSales,
 } from "@/mocks/retail";
-import { runInBackground, services } from "@/services";
+import { dataSource, runInBackground, services } from "@/services";
 import { NOW_TIME, TODAY, addDays } from "@/lib/format";
 import { useStore } from "@/lib/store";
 
@@ -50,6 +50,11 @@ type RetailStore = {
   /** Recibe la orden: entrada a bodega central. */
   receiveOrder: (id: string) => void;
   advanceShipment: (id: string) => void;
+  // Hidratación desde el servidor (T5-2): en modo mock siempre loading=false y error=null.
+  loading: boolean;
+  error: string | null;
+  /** Reintenta la carga inicial desde el servidor (solo modo http). */
+  retry: () => void;
 };
 
 const RetailContext = createContext<RetailStore | null>(null);
@@ -64,11 +69,50 @@ const addressOf = (rut: string) => {
 
 export function RetailProvider({ children }: { children: React.ReactNode }) {
   const { currentUser } = useStore();
-  const [products, setProducts] = useState(seedProducts); // TODO(api): reemplazar por services.retail.listProducts()
-  const [sales, setSales] = useState(seedSales); // TODO(api): reemplazar por services.retail.listSales()
-  const [movements, setMovements] = useState(seedRetailMovements); // TODO(api): reemplazar por services.retail.listMovements()
-  const [orders, setOrders] = useState(seedRetailOrders); // TODO(api): reemplazar por services.retail.listOrders()
-  const [shipments, setShipments] = useState(() => buildSeedShipments(seedSales, addressOf)); // TODO(api): reemplazar por services.retail.listShipments()
+  const [products, setProducts] = useState(seedProducts); // http: se hidrata con services.retail.listProducts()
+  const [sales, setSales] = useState(seedSales); // http: se hidrata con services.retail.listSales()
+  const [movements, setMovements] = useState(seedRetailMovements); // http: se hidrata con services.retail.listMovements()
+  const [orders, setOrders] = useState(seedRetailOrders); // http: se hidrata con services.retail.listOrders()
+  const [shipments, setShipments] = useState(() => buildSeedShipments(seedSales, addressOf)); // http: se hidrata con services.retail.listShipments()
+
+  // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
+  const [loading, setLoading] = useState(dataSource === "http");
+  const [error, setError] = useState<string | null>(null);
+
+  /** Carga inicial desde el servidor. Si falla, se conserva la semilla y se expone el error. */
+  const load = useCallback(async () => {
+    if (dataSource !== "http") return;
+    try {
+      const [productsData, salesData, movementsData, ordersData, shipmentsData] = await Promise.all([
+        services.retail.listProducts(),
+        services.retail.listSales(),
+        services.retail.listMovements(),
+        services.retail.listOrders(),
+        services.retail.listShipments(),
+      ]);
+      setProducts(productsData);
+      setSales(salesData);
+      setMovements(movementsData);
+      setOrders(ordersData);
+      setShipments(shipmentsData);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar la información de la tienda");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Hidratación inicial al montar: el fetch resuelve en continuaciones async, no es un render en cascada.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount intencional del store en modo http
+    if (dataSource === "http") void load();
+  }, [load]);
+
+  const retry = () => {
+    setLoading(true);
+    setError(null);
+    void load();
+  };
 
   const record = (list: Omit<RetailMovement, "id" | "date" | "user">[]) => {
     const created = list.map((m) => ({ ...m, id: newId("rm"), date: TODAY, user: currentUser.name }));
@@ -102,7 +146,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
       const fee = delivery && owner ? deliveryFee(owner.sector) : 0;
       const sale: Sale = {
         id: newId("s"),
-        number: Math.max(...sales.map((s) => s.number)) + 1,
+        number: Math.max(0, ...sales.map((s) => s.number)) + 1,
         date: TODAY,
         time: NOW_TIME,
         items,
@@ -144,7 +188,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
     createOrder: (supplierId, items, leadTimeDays) => {
       const order: RetailOrder = {
         id: newId("ro"),
-        number: Math.max(...orders.map((o) => o.number)) + 1,
+        number: Math.max(0, ...orders.map((o) => o.number)) + 1,
         supplierId,
         date: TODAY,
         expected: addDays(TODAY, leadTimeDays),
@@ -176,6 +220,9 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
       );
       runInBackground(services.retail.advanceShipment(id));
     },
+    loading,
+    error,
+    retry,
   };
 
   return <RetailContext.Provider value={store}>{children}</RetailContext.Provider>;

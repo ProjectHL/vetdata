@@ -1,6 +1,6 @@
 "use client";
 
-import { createContext, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { Appointment } from "@/domain/appointments";
 import type { Room } from "@/domain/clinic";
 import type { Invoice } from "@/domain/invoices";
@@ -31,7 +31,7 @@ import {
   seedUsers,
 } from "@/mocks/settings";
 import { seedGrants, seedRequests } from "@/mocks/sharing";
-import { runInBackground, services } from "@/services";
+import { dataSource, runInBackground, services } from "@/services";
 import { TODAY, addDays } from "@/lib/format";
 
 /**
@@ -97,6 +97,12 @@ type Store = {
   setClinicProfile: (p: ClinicProfile) => void;
   sharingPolicy: SharingPolicy;
   setSharingPolicy: (p: SharingPolicy) => void;
+
+  // Hidratación desde el servidor (T5-2): en modo mock siempre loading=false y error=null.
+  loading: boolean;
+  error: string | null;
+  /** Reintenta la carga inicial desde el servidor (solo modo http). */
+  retry: () => void;
 };
 
 export type { TaskMeta };
@@ -108,22 +114,93 @@ const newId = (prefix: string) => `${prefix}-new-${++seq}`;
 
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [appointments, setAppointments] = useState(seedAppointments); // TODO(api): reemplazar por services.appointments.list()
-  const [invoices, setInvoices] = useState(seedInvoices); // TODO(api): reemplazar por services.invoices.list()
-  const [referrals, setReferrals] = useState(seedReferrals); // TODO(api): reemplazar por services.referrals.list()
-  const [requests, setRequests] = useState(seedRequests); // TODO(api): reemplazar por services.sharing.listRequests()
-  const [grants, setGrants] = useState(seedGrants); // TODO(api): reemplazar por services.sharing.listGrants()
-  const [rooms, setRooms] = useState(seedRooms); // TODO(api): reemplazar por services.clinic.listRooms()
-  const [medications, setMedications] = useState(seedMedications); // TODO(api): reemplazar por services.pharmacy.listMedications()
-  const [movements, setMovements] = useState(seedMovements); // TODO(api): reemplazar por services.pharmacy.listMovements()
-  const [purchaseOrders, setPurchaseOrders] = useState(seedPurchaseOrders); // TODO(api): reemplazar por services.pharmacy.listPurchaseOrders()
-  const [reminders, setReminders] = useState<string[]>([]); // TODO(api): reemplazar por services.tasks.listReminders()
-  const [taskMeta, setTaskMeta] = useState<Record<string, TaskMeta>>({}); // TODO(api): reemplazar por services.tasks.listMeta()
+  const [appointments, setAppointments] = useState(seedAppointments); // http: se hidrata con services.appointments.list()
+  const [invoices, setInvoices] = useState(seedInvoices); // http: se hidrata con services.invoices.list()
+  const [referrals, setReferrals] = useState(seedReferrals); // http: se hidrata con services.referrals.list()
+  const [requests, setRequests] = useState(seedRequests); // http: se hidrata con services.sharing.listRequests()
+  const [grants, setGrants] = useState(seedGrants); // http: se hidrata con services.sharing.listGrants()
+  const [rooms, setRooms] = useState(seedRooms); // http: se hidrata con services.clinic.listRooms()
+  const [medications, setMedications] = useState(seedMedications); // http: se hidrata con services.pharmacy.listMedications()
+  const [movements, setMovements] = useState(seedMovements); // http: se hidrata con services.pharmacy.listMovements()
+  const [purchaseOrders, setPurchaseOrders] = useState(seedPurchaseOrders); // http: se hidrata con services.pharmacy.listPurchaseOrders()
+  // Sin endpoint en el backend (NotImplemented: GET /api/v1/reminders): se conserva el estado local.
+  const [reminders, setReminders] = useState<string[]>([]);
+  const [taskMeta, setTaskMeta] = useState<Record<string, TaskMeta>>({}); // http: se hidrata con services.tasks.listMeta()
   const [role, setRole] = useState<Role>("Veterinario"); // Demo: "Ver como". TODO(api): el rol sale de services.settings.getCurrentUser()
-  const [users, setUsers] = useState(seedUsers); // TODO(api): reemplazar por services.settings.listUsers()
-  const [rolePermissions, setRolePermissions] = useState(defaultRolePermissions); // TODO(api): reemplazar por services.settings.getRolePermissions()
-  const [clinicProfile, setClinicProfile] = useState(seedClinicProfile); // TODO(api): reemplazar por services.settings.getClinicProfile()
-  const [sharingPolicy, setSharingPolicy] = useState(seedSharingPolicy); // TODO(api): reemplazar por services.settings.getSharingPolicy()
+  const [users, setUsers] = useState(seedUsers); // http: se hidrata con services.settings.listUsers()
+  const [rolePermissions, setRolePermissions] = useState(defaultRolePermissions); // http: se hidrata con services.settings.getRolePermissions()
+  const [clinicProfile, setClinicProfile] = useState(seedClinicProfile); // http: se hidrata con services.settings.getClinicProfile()
+  // Sin endpoint en el backend (NotImplemented: GET/PUT /api/v1/settings/sharing-policy): se conserva la semilla mock.
+  const [sharingPolicy, setSharingPolicy] = useState(seedSharingPolicy);
+
+  // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
+  const [loading, setLoading] = useState(dataSource === "http");
+  const [error, setError] = useState<string | null>(null);
+
+  /** Carga inicial desde el servidor. Si falla, se conserva la semilla y se expone el error. */
+  const load = useCallback(async () => {
+    if (dataSource !== "http") return;
+    try {
+      const [
+        appointmentsData,
+        invoicesData,
+        referralsData,
+        requestsData,
+        grantsData,
+        roomsData,
+        medicationsData,
+        movementsData,
+        purchaseOrdersData,
+        taskMetaData,
+        usersData,
+        rolePermissionsData,
+        clinicProfileData,
+      ] = await Promise.all([
+        services.appointments.list(),
+        services.invoices.list(),
+        services.referrals.list(),
+        services.sharing.listRequests(),
+        services.sharing.listGrants(),
+        services.clinic.listRooms(),
+        services.pharmacy.listMedications(),
+        services.pharmacy.listMovements(),
+        services.pharmacy.listPurchaseOrders(),
+        services.tasks.listMeta(),
+        services.settings.listUsers(),
+        services.settings.getRolePermissions(),
+        services.settings.getClinicProfile(),
+      ]);
+      setAppointments(appointmentsData);
+      setInvoices(invoicesData);
+      setReferrals(referralsData);
+      setRequests(requestsData);
+      setGrants(grantsData);
+      setRooms(roomsData);
+      setMedications(medicationsData);
+      setMovements(movementsData);
+      setPurchaseOrders(purchaseOrdersData);
+      setTaskMeta(taskMetaData);
+      if (usersData.length > 0) setUsers(usersData);
+      setRolePermissions(rolePermissionsData);
+      setClinicProfile(clinicProfileData);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo cargar la información de la clínica");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    // Hidratación inicial al montar: el fetch resuelve en continuaciones async, no es un render en cascada.
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetch-on-mount intencional del store en modo http
+    if (dataSource === "http") void load();
+  }, [load]);
+
+  const retry = () => {
+    setLoading(true);
+    setError(null);
+    void load();
+  };
 
   const currentUser = users.find((u) => u.id === demoUserByRole[role])!;
 
@@ -157,7 +234,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return created;
     },
     addInvoice: (i) => {
-      const folio = Math.max(...invoices.map((x) => x.folio)) + 1;
+      const folio = Math.max(0, ...invoices.map((x) => x.folio)) + 1;
       const created = { ...i, id: newId("f"), folio };
       setInvoices((prev) => [...prev, created]);
       // Los medicamentos vendidos salen del inventario.
@@ -272,7 +349,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     createPurchaseOrder: (supplierId, items) => {
       const created: PurchaseOrder = {
         id: newId("oc"),
-        number: Math.max(...purchaseOrders.map((o) => o.number)) + 1,
+        number: Math.max(0, ...purchaseOrders.map((o) => o.number)) + 1,
         supplierId,
         date: TODAY,
         items: items.map((i) => ({
@@ -350,6 +427,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setSharingPolicy(p);
       runInBackground(services.settings.updateSharingPolicy(p));
     },
+    loading,
+    error,
+    retry,
   };
 
   return <StoreContext.Provider value={store}>{children}</StoreContext.Provider>;
