@@ -194,42 +194,52 @@ func (s *Server) checkoutRetail(w http.ResponseWriter, r *http.Request) error {
 		}
 		seen[it.ProductID] = true
 	}
-	var ownerID *string
-	var ownerSector, ownerAddress string
+	// El RUT se normaliza (sintaxis) antes de la tx; la resolución del dueño y su
+	// snapshot (address/sector) se leen DENTRO de la tx con lock (T6-1), para que
+	// el despacho no use datos rancios si el dueño cambia entre request y commit.
+	var rut string
 	if in.OwnerRUT != "" {
-		rut, e := domain.NormalizeRUT(in.OwnerRUT)
+		var e error
+		rut, e = domain.NormalizeRUT(in.OwnerRUT)
 		if e != nil {
 			return fail(400, "invalid_rut", "RUT inválido")
 		}
-		var oid string
-		if e = s.pool.QueryRow(r.Context(), "SELECT o.id FROM owners o JOIN clinic_owners co ON co.owner_id=o.id WHERE o.rut=$1 AND co.clinic_id=$2", rut, a.ClinicID).Scan(&oid); e != nil {
-			return fail(404, "unknown_owner", "Dueño inexistente")
-		}
-		if e = s.pool.QueryRow(r.Context(), "SELECT address,sector FROM owners WHERE id=$1", oid).Scan(&ownerAddress, &ownerSector); e != nil {
-			return e
-		}
-		ownerID = &oid
 	}
 	fee := int64(0)
-	var courier, address string
+	var courier string
 	if in.Delivery != nil {
 		if !retailCouriers[in.Delivery.Courier] {
 			return fail(400, "invalid_courier", "Courier desconocido")
 		}
-		if ownerID == nil {
+		if rut == "" {
 			return fail(400, "delivery_owner_required", "El despacho exige cliente identificado")
 		}
 		fee = deliveryFeeNet
 		courier = in.Delivery.Courier
-		address = in.Delivery.Address
-		if strings.TrimSpace(address) == "" {
-			address = ownerAddress
-		}
-		if len(address) > 500 {
-			return fail(400, "invalid_address", "Dirección inválida")
-		}
 	}
 	return s.mutate(w, r, a, "tienda.vender", in, 201, func(tx pgx.Tx, a Actor) (any, error) {
+		var ownerID *string
+		var ownerSector, address string
+		if rut != "" {
+			var oid, oaddr string
+			if err := tx.QueryRow(r.Context(), "SELECT o.id,o.address,o.sector FROM owners o JOIN clinic_owners co ON co.owner_id=o.id WHERE o.rut=$1 AND co.clinic_id=$2 FOR UPDATE OF o", rut, a.ClinicID).Scan(&oid, &oaddr, &ownerSector); err != nil {
+				if err == pgx.ErrNoRows {
+					return nil, fail(404, "unknown_owner", "Dueño inexistente")
+				}
+				return nil, err
+			}
+			ownerID = &oid
+			address = oaddr
+		}
+		if in.Delivery != nil {
+			if addr := strings.TrimSpace(in.Delivery.Address); addr != "" {
+				address = addr
+			}
+			// Sin dirección explícita se usa la vigente del dueño (leída en esta tx).
+			if len(address) > 500 {
+				return nil, fail(400, "invalid_address", "Dirección inválida")
+			}
+		}
 		var net int64
 		lines := make([]map[string]any, 0, len(in.Items))
 		for _, it := range in.Items {

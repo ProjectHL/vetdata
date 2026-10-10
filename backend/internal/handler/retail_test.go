@@ -278,3 +278,35 @@ func TestRetailRequiresPermission(t *testing.T) {
 		t.Fatal("veterinario sin tienda.vender", code, out)
 	}
 }
+
+func TestRetailCheckoutOwnerSnapshotInTx(t *testing.T) {
+	f, own, _, supplier, product := setupRetail(t)
+	ctx := context.Background()
+	receiveRetail(t, f, own, supplier, product, 5, "C-SNAP")
+	if w := f.request("POST", "/api/v1/retail/transfers", map[string]any{"productId": product, "qty": 5}, own...); w.Code != 201 {
+		t.Fatal(w.Code, w.Body.String())
+	}
+	// Owner 12345678-5 existe via setupSharing con address/sector iniciales.
+	// Cambia el address del dueño y verifica que el despacho usa el valor vigente
+	// al momento del commit (lecturas dentro de la tx, T6-1).
+	if _, e := f.pool.Exec(ctx, "UPDATE owners SET address='Nueva Dirección 123',sector='Providencia' WHERE rut='12345678-5'"); e != nil {
+		t.Fatal(e)
+	}
+	code, out := checkout(t, f, domain.UUID(), map[string]any{"items": []map[string]any{{"productId": product, "qty": 1}}, "payment": "Transferencia", "ownerRut": "12345678-5", "delivery": map[string]any{"courier": "Reparto propio"}}, own...)
+	if code != 201 {
+		t.Fatal(code, out)
+	}
+	shipment, ok := out["shipment"].(map[string]any)
+	if !ok {
+		t.Fatal("shipment missing", out)
+	}
+	if shipment["address"] != "Nueva Dirección 123" || shipment["sector"] != "Providencia" {
+		t.Fatal("stale owner snapshot", shipment)
+	}
+	// Dueño inexistente (RUT válido con DV correcto pero sin vínculo) → 404
+	// (resolución dentro de la tx). Nota: no se puede desvincular al owner 12345678-5
+	// porque retail_sales tiene FK a clinic_owners; se usa un RUT sin vínculo.
+	if code, out := checkout(t, f, domain.UUID(), map[string]any{"items": []map[string]any{{"productId": product, "qty": 1}}, "payment": "Efectivo", "ownerRut": "11222333-9"}, own...); code != 404 {
+		t.Fatal("unlinked owner", code, out)
+	}
+}
