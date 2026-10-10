@@ -1,4 +1,4 @@
-// Datos semilla de la demo. Solo los leen services/mock, el estado inicial de los stores y lib/lookups.
+// Datos semilla de la demo. Solo los leen services/mock, el estado inicial de los stores y el registry lib/server-state (fallbacks).
 import type {
   AccessEntry,
   AuditEntry,

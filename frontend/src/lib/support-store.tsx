@@ -2,8 +2,9 @@
 
 import { createContext, useCallback, useContext, useEffect, useState } from "react";
 import type { Idea, Release, Ticket, TicketCategory, TicketPriority, TicketStatus } from "@/domain/support";
-import { currentClinic, seedIdeas, seedTickets, releases as seedReleases } from "@/lib/lookups";
-import { publish } from "@/lib/server-state";
+import { seedIdeas, seedTickets, releases as mockReleases } from "@/mocks/support";
+import { currentClinic as mockCurrentClinic } from "@/mocks/network";
+import { publish, read, readScalar } from "@/lib/server-state";
 import { dataSource, runInBackground, services } from "@/services";
 import { NOW_ISO } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -44,8 +45,8 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, role } = useStore();
   const [tickets, setTickets] = useState(seedTickets); // http: se hidrata con services.support.listTickets()
   const [ideas, setIdeas] = useState(seedIdeas); // http: se hidrata con services.support.listIdeas()
-  // Catálogo publicado al registro de lib (no se expone: la UI lo lee vía lookups.releases).
-  const [releases, setReleases] = useState<Release[]>(seedReleases); // http: se hidrata con services.support.listReleases()
+  // Catálogo publicado al registro de lib (no se expone: la UI lo lee vía useLiveList("releases") de server-state).
+  const [releases, setReleases] = useState<Release[]>(read("releases", mockReleases)); // http: se hidrata con services.support.listReleases()
 
   // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
   const [loading, setLoading] = useState(dataSource === "http");
@@ -156,7 +157,7 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
       runInBackground(services.support.vote(id));
     },
     proposeIdea: ({ title, description, module }) => {
-      const idea: Idea = { id: newId("id"), title, description, module, status: "En evaluación", votes: 1, votedByMe: true, proposedBy: currentClinic };
+      const idea: Idea = { id: newId("id"), title, description, module, status: "En evaluación", votes: 1, votedByMe: true, proposedBy: readScalar("currentClinic", mockCurrentClinic) };
       setIdeas((prev) => [...prev, idea]);
       runInBackground(services.support.proposeIdea({ title, description, module }));
       return addTicket({ title, category: "Mejora", priority: "Baja", module, body: description, route: "/soporte/mejoras", ideaId: idea.id });

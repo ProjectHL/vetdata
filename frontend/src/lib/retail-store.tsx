@@ -16,14 +16,14 @@ import {
 } from "@/domain/retail";
 import {
   buildSeedShipments,
-  getOwner,
+  retailSuppliers as mockRetailSuppliers,
   seedProducts,
   seedRetailMovements,
   seedRetailOrders,
   seedSales,
-  retailSuppliers as seedRetailSuppliers,
-} from "@/lib/lookups";
-import { publish } from "@/lib/server-state";
+} from "@/mocks/retail";
+import { owners as mockOwners } from "@/mocks/owners";
+import { publish, read } from "@/lib/server-state";
 import { dataSource, runInBackground, services } from "@/services";
 import { NOW_TIME, TODAY, addDays } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -65,6 +65,11 @@ const RetailContext = createContext<RetailStore | null>(null);
 let seq = 0;
 const newId = (prefix: string) => `${prefix}-new-${++seq}`;
 
+/** TODO(api): services.owners.get(rut) */
+const getOwner = (rut: string) => {
+  return read("owners", mockOwners).find((o) => o.rut === rut);
+};
+
 const addressOf = (rut: string) => {
   const o = getOwner(rut);
   return { address: o?.address ?? "", sector: o?.sector ?? "" };
@@ -77,8 +82,8 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
   const [movements, setMovements] = useState(seedRetailMovements); // http: se hidrata con services.retail.listMovements()
   const [orders, setOrders] = useState(seedRetailOrders); // http: se hidrata con services.retail.listOrders()
   const [shipments, setShipments] = useState(() => buildSeedShipments(seedSales, addressOf)); // http: se hidrata con services.retail.listShipments()
-  // Catálogo publicado al registro de lib (no se expone: la UI lo lee vía lookups.retailSuppliers).
-  const [suppliers, setSuppliers] = useState<RetailSupplier[]>(seedRetailSuppliers); // http: se hidrata con services.retail.listSuppliers()
+  // Catálogo publicado al registro de lib (no se expone: la UI lo lee vía useRetailSuppliers de server-state).
+  const [suppliers, setSuppliers] = useState<RetailSupplier[]>(read("retailSuppliers", mockRetailSuppliers)); // http: se hidrata con services.retail.listSuppliers()
 
   // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
   const [loading, setLoading] = useState(dataSource === "http");

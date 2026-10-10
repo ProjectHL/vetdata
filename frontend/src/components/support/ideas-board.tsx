@@ -26,9 +26,9 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
-import { currentClinic } from "@/lib/lookups";
 import { IDEA_FLOW, type Idea } from "@/domain/support";
 import { channels } from "@/lib/nav";
+import { useCurrentClinic } from "@/lib/server-state";
 import { useSupport } from "@/lib/support-store";
 import { cn } from "@/lib/utils";
 import { GENERAL_MODULE, moduleLabel } from "./shared";
@@ -89,6 +89,7 @@ export function IdeasBoard() {
 }
 
 function IdeaCard({ idea, ticketId, onVote }: { idea: Idea; ticketId?: string; onVote: () => void }) {
+  const currentClinic = useCurrentClinic();
   const launched = idea.status === "Lanzada";
   return (
     <Card className="gap-2 py-3">

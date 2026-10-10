@@ -5,17 +5,17 @@
  * (la semilla) y `publish` no hace nada, así que todo sigue igual.
  *
  * En modo http los stores publican sus listas hidratadas con `publish` y
- * `lib/lookups` lee desde aquí con `read`. El truco que permite no tocar
+ * `lib/` lee desde aquí con `read`. El truco que permite no tocar
  * ningún componente: `read` devuelve siempre el MISMO arreglo vivo por
  * clave y `publish` lo sincroniza en el lugar (sin reemplazar la
- * referencia), así que los `export const` de `lookups` evaluados al
- * importar el módulo ven los datos del servidor en cuanto llegan.
+ * referencia), así que las lecturas evaluadas durante el render ven los
+ * datos del servidor en cuanto llegan.
  *
  * La carga de catálogos sin store dueño (pacientes, dueños, doctores,
  * clínicas, proveedores) y de las series de analytics vive en
  * `ensureServerCatalogs`, que llama el store principal dentro de su
  * hidratación: su `setState` posterior re-renderiza el árbol y los
- * consumidores de `lookups` ya ven datos del servidor. Cada endpoint se
+ * consumidores de `lib/` ya ven datos del servidor. Cada endpoint se
  * publica por separado (allSettled): si uno falla, los demás igual se
  * actualizan y la semilla queda como fallback. Nunca lanza.
  *
@@ -44,9 +44,9 @@ import {
   type VaccineCoverage,
 } from "@/domain/metrics";
 import { dataSource, services } from "@/services";
-// Semillas: este módulo es el único punto de `src/lib` (junto a `lookups`)
-// que importa `@/mocks`. Los componentes leen los catálogos con los hooks
-// de abajo, nunca con imports directos a `@/mocks`.
+// Semillas: cada lector de `src/lib` importa su propia semilla de
+// `@/mocks` como fallback de `read`/`readScalar`. Los componentes leen
+// los catálogos con los hooks de abajo, nunca con imports directos a `@/mocks`.
 import { doctors as seedDoctors, rooms as seedRooms } from "@/mocks/clinic";
 import { medications as seedMedications } from "@/mocks/medications";
 import {
@@ -272,8 +272,8 @@ export function useRetailSuppliers(): RetailSupplier[] {
 }
 
 /**
- * Clínica de la sesión. Se suscribe al escalar como `lookups` (ver
- * `subscribeScalar`): en http re-renderiza al publicar, en mock es la semilla.
+ * Clínica de la sesión. Se suscribe al escalar (ver `subscribeScalar`):
+ * en http re-renderiza al publicar, en mock es la semilla.
  * TODO(api): services.network.getCurrentClinic()
  */
 export function useCurrentClinic(): string {
@@ -326,7 +326,7 @@ export function useBoxOccupancy(): BoxOccupancy[] {
 
 /**
  * Prestaciones facturables. Sin endpoint en el backend: se conserva la
- * semilla en ambos modos (ver `lookups.billableServices`).
+ * semilla de `@/mocks/services` en ambos modos.
  * TODO(api): services.clinic.listServices()
  */
 export function useBillableServices(): Service[] {
@@ -345,7 +345,7 @@ export function useBillableServices(): Service[] {
  *
  * Decisión (T5-3a): el store principal es el dueño de esta carga porque su
  * hidratación ya re-renderiza todo el árbol, así los consumidores síncronos
- * de `lookups` ven datos del servidor sin suscripciones nuevas ni cambios
+ * de `lib/` ven datos del servidor sin suscripciones nuevas ni cambios
  * en componentes. Un fetch lazy con caché en este módulo dejaría a esos
  * consumidores con la semilla hasta el próximo render, sin quién lo
  * provoque. Cada endpoint se resuelve por separado: un fallo solo conserva

@@ -14,7 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { NVR } from "@/lib/lookups";
+import { NVR } from "./nvr";
 import { OPEN_EVENT, WAITING_CAPACITY, ZONES, type Zone } from "@/domain/security";
 import { formatDateTime } from "@/lib/format";
 import { useSecurity } from "@/lib/security-store";

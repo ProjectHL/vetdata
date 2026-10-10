@@ -1,7 +1,10 @@
 "use client";
 
 import { dueVaccines, visiblePatients } from "@/lib/analytics";
-import { currentClinic, getOwner, getPatient } from "@/lib/lookups";
+import { read, readScalar } from "@/lib/server-state";
+import { currentClinic as mockCurrentClinic } from "@/mocks/network";
+import { owners as mockOwners } from "@/mocks/owners";
+import { patients as mockPatients } from "@/mocks/patients";
 import { stockStatus } from "@/domain/medications";
 import { ownerName } from "@/domain/owners";
 import { INTERNAL_PHARMACY } from "@/domain/referrals";
@@ -37,6 +40,21 @@ function ago(date: string) {
   return d <= 0 ? "hoy" : d === 1 ? "ayer" : `hace ${d} d`;
 }
 
+/** TODO(api): services.patients.get(id) */
+function getPatient(id: string) {
+  return read("patients", mockPatients).find((p) => p.id === id);
+}
+
+/** TODO(api): services.owners.get(rut) */
+function getOwner(rut: string) {
+  return read("owners", mockOwners).find((o) => o.rut === rut);
+}
+
+/** Clínica de la sesión. TODO(api): services.network.getCurrentClinic() */
+function getCurrentClinic() {
+  return readScalar("currentClinic", mockCurrentClinic);
+}
+
 /**
  * Bandeja única: deriva los pendientes del estado de todos los módulos.
  * Un pendiente desaparece cuando se resuelve en su módulo (o se marca hecho).
@@ -63,7 +81,7 @@ export function useTasks() {
   }
 
   // Clínica — vacunas vencidas sin recordatorio (una tarea por mascota)
-  const visible = visiblePatients(store.grants, currentClinic);
+  const visible = visiblePatients(store.grants, getCurrentClinic());
   const overdue = dueVaccines(visible).filter((d) => d.state === "vencida");
   for (const pid of [...new Set(overdue.map((d) => d.patient.id))]) {
     if (store.reminders.includes(pid)) continue;
@@ -91,7 +109,7 @@ export function useTasks() {
   }
 
   // Red — solicitudes recibidas
-  for (const r of store.requests.filter((r) => r.to === currentClinic && r.status === "Pendiente")) {
+  for (const r of store.requests.filter((r) => r.to === getCurrentClinic() && r.status === "Pendiente")) {
     tasks.push({
       id: `solicitud:${r.id}`, channel: "Red", priority: daysUntil(r.date) <= -1 ? "Alta" : "Media", since: r.date, permission: "red.aprobar",
       title: `Responder solicitud de ${r.from}`,
@@ -199,6 +217,6 @@ export function useNavBadges(): Record<string, number> {
   const { mine } = useTasks();
   return {
     "/inicio/pendientes": mine.length,
-    "/clinicas/solicitudes": requests.filter((r) => r.to === currentClinic && r.status === "Pendiente").length,
+    "/clinicas/solicitudes": requests.filter((r) => r.to === getCurrentClinic() && r.status === "Pendiente").length,
   };
 }

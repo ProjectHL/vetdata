@@ -2,7 +2,7 @@
  * Contratos de la capa de servicios: una interfaz async por dominio.
  *
  * - Lecturas (`list*` / `get*`): lo que el backend debe servir para hidratar
- *   los stores de sesión y los catálogos que hoy salen de `src/lib/lookups.ts`.
+ *   los stores de sesión y los catálogos que hoy salen del registro de `src/lib/server-state.ts`.
  * - Mutaciones: una por cada acción que hoy hacen los stores (`src/lib/*store*.tsx`).
  *   Los stores aplican una actualización optimista local y luego llaman a la
  *   operación en segundo plano; el resultado del servidor es la versión canónica.

@@ -1,3 +1,6 @@
+"use client";
+
+import { use } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -18,15 +21,24 @@ import { OwnerRecords } from "@/components/owners/owner-records";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { getOwner, ownerLastVisit, petsOf } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
+import { lastVisit } from "@/domain/patients";
 import { ageFrom, formatCLP, formatDate, formatRut } from "@/lib/format";
+import { useOwners, usePatients } from "@/lib/server-state";
 
-export default async function PropietarioPage(props: PageProps<"/pacientes/propietarios/[rut]">) {
-  const { rut } = await props.params;
-  const owner = getOwner(decodeURIComponent(rut).toUpperCase());
+export default function PropietarioPage(props: PageProps<"/pacientes/propietarios/[rut]">) {
+  const { rut } = use(props.params);
+  const owners = useOwners();
+  const patients = usePatients();
+  const owner = owners.find((o) => o.rut === decodeURIComponent(rut).toUpperCase());
   if (!owner) notFound();
 
+  const petsOf = (ownerRut: string) => patients.filter((p) => p.ownerRut === ownerRut);
+  const ownerLastVisit = (ownerRut: string) =>
+    petsOf(ownerRut).reduce((max, p) => {
+      const v = lastVisit(p);
+      return v > max ? v : max;
+    }, "");
   const pets = petsOf(owner.rut);
   const petIds = pets.map((p) => p.id);
   const initials = `${owner.firstName[0]}${owner.lastName[0]}`;

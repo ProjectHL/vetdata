@@ -23,9 +23,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
-import { currentClinic } from "@/lib/lookups";
 import { ROLES, type Role } from "@/domain/settings";
 import { findByPath } from "@/lib/nav";
+import { useCurrentClinic } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 
 export function Topbar() {
@@ -37,6 +37,7 @@ export function Topbar() {
   const pathname = usePathname();
   const { channel, item } = findByPath(pathname);
   const { requests, role, setRole, currentUser, sharingPolicy } = useStore();
+  const currentClinic = useCurrentClinic();
   const pending = sharingPolicy.notifyRequests
     ? requests.filter((r) => r.to === currentClinic && r.status === "Pendiente").length
     : 0;

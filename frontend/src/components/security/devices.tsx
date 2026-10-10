@@ -26,7 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { NVR } from "@/lib/lookups";
+import { NVR } from "./nvr";
 import { type SecuritySettings, ZONES } from "@/domain/security";
 import { formatDateTime } from "@/lib/format";
 import { useSecurity } from "@/lib/security-store";

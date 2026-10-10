@@ -1,5 +1,7 @@
 import { coverage, dueVaccines } from "@/lib/analytics";
-import { monthlyConsults, patients } from "@/lib/lookups";
+import { read } from "@/lib/server-state";
+import { monthlyConsults as mockMonthlyConsults } from "@/mocks/metrics";
+import { patients as mockPatients } from "@/mocks/patients";
 import { type Appointment, SLOTS } from "@/domain/appointments";
 import type { Doctor } from "@/domain/clinic";
 import { NOW_TIME, TODAY, addDays } from "@/lib/format";
@@ -7,6 +9,7 @@ import type { Patient } from "@/domain/patients";
 
 /** Consultas del mes en curso (misma serie que el gráfico de Diagnósticos). */
 export function consultsThisMonth() {
+  const monthlyConsults = read("monthlyConsults", mockMonthlyConsults);
   const cur = monthlyConsults[monthlyConsults.length - 1];
   const prev = monthlyConsults[monthlyConsults.length - 2];
   return { value: cur.clinica, previous: prev.clinica };
@@ -16,7 +19,7 @@ export function vaccineKpis(visible: Patient[]) {
   const due = dueVaccines(visible);
   return {
     coverage: coverage(visible),
-    networkCoverage: coverage(patients),
+    networkCoverage: coverage(read("patients", mockPatients)),
     overdue: due.filter((d) => d.state === "vencida").length,
     soon: due.filter((d) => d.state === "próxima").length,
     due,

@@ -1,9 +1,21 @@
-import { ownerLastVisit, owners } from "@/lib/lookups";
+import { read } from "@/lib/server-state";
+import { owners as mockOwners } from "@/mocks/owners";
+import { patients as mockPatients } from "@/mocks/patients";
 import type { Invoice } from "@/domain/invoices";
 import { type Owner } from "@/domain/owners";
 import { type Patient, lastVisit } from "@/domain/patients";
 import type { Sale } from "@/domain/retail";
 import { daysUntil } from "@/lib/format";
+
+/** Última visita entre todas las mascotas del dueño. TODO(api): campo calculado por el backend. */
+function ownerLastVisit(ownerRut: string) {
+  return read("patients", mockPatients)
+    .filter((p) => p.ownerRut === ownerRut)
+    .reduce((max, p) => {
+      const v = lastVisit(p);
+      return v > max ? v : max;
+    }, "");
+}
 
 export function patientKpis(visible: Patient[]) {
   const active = visible.filter((p) => daysUntil(lastVisit(p)) >= -365);
@@ -27,7 +39,7 @@ export function speciesDistribution(visible: Patient[]) {
 /** Dueños con al menos una mascota visible para la clínica. */
 export function visibleOwners(visible: Patient[]) {
   const ruts = new Set(visible.map((p) => p.ownerRut));
-  return owners.filter((o) => ruts.has(o.rut));
+  return read("owners", mockOwners).filter((o) => ruts.has(o.rut));
 }
 
 export function petsPerOwner(visible: Patient[]) {

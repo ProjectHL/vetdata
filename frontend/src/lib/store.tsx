@@ -16,26 +16,23 @@ import {
   accessLevel,
 } from "@/domain/sharing";
 import type { TaskMeta } from "@/domain/tasks";
+import { seedAppointments } from "@/mocks/appointments";
+import { doctors as mockDoctors, rooms as mockRooms } from "@/mocks/clinic";
+import { medications as mockMedications } from "@/mocks/medications";
+import { currentClinic as mockCurrentClinic } from "@/mocks/network";
+import { seedInvoices } from "@/mocks/invoices";
+import { patients as mockPatients } from "@/mocks/patients";
+import { seedMovements, seedPurchaseOrders } from "@/mocks/pharmacy";
+import { seedReferrals } from "@/mocks/referrals";
 import {
-  currentClinic,
   defaultRolePermissions,
   demoUserByRole,
-  doctors,
-  getPatient,
-  seedAppointments,
   seedClinicProfile,
-  seedGrants,
-  seedInvoices,
-  medications as seedMedications,
-  seedMovements,
-  seedPurchaseOrders,
-  seedReferrals,
-  seedRequests,
-  rooms as seedRooms,
   seedSharingPolicy,
   seedUsers,
-} from "@/lib/lookups";
-import { ensureServerCatalogs, publish } from "@/lib/server-state";
+} from "@/mocks/settings";
+import { seedGrants, seedRequests } from "@/mocks/sharing";
+import { ensureServerCatalogs, publish, read, readScalar } from "@/lib/server-state";
 import { dataSource, runInBackground, services } from "@/services";
 import { TODAY, addDays } from "@/lib/format";
 
@@ -117,6 +114,16 @@ const StoreContext = createContext<Store | null>(null);
 let seq = 0;
 const newId = (prefix: string) => `${prefix}-new-${++seq}`;
 
+/** TODO(api): services.patients.get(id) */
+function getPatient(id: string) {
+  return read("patients", mockPatients).find((p) => p.id === id);
+}
+
+/** Clínica de la sesión. TODO(api): services.network.getCurrentClinic() */
+function getCurrentClinic() {
+  return readScalar("currentClinic", mockCurrentClinic);
+}
+
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [appointments, setAppointments] = useState(seedAppointments); // http: se hidrata con services.appointments.list()
@@ -124,8 +131,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [referrals, setReferrals] = useState(seedReferrals); // http: se hidrata con services.referrals.list()
   const [requests, setRequests] = useState(seedRequests); // http: se hidrata con services.sharing.listRequests()
   const [grants, setGrants] = useState(seedGrants); // http: se hidrata con services.sharing.listGrants()
-  const [rooms, setRooms] = useState(seedRooms); // http: se hidrata con services.clinic.listRooms()
-  const [medications, setMedications] = useState(seedMedications); // http: se hidrata con services.pharmacy.listMedications()
+  const [rooms, setRooms] = useState(read("rooms", mockRooms)); // http: se hidrata con services.clinic.listRooms()
+  const [medications, setMedications] = useState(read("medications", mockMedications)); // http: se hidrata con services.pharmacy.listMedications()
   const [movements, setMovements] = useState(seedMovements); // http: se hidrata con services.pharmacy.listMovements()
   const [purchaseOrders, setPurchaseOrders] = useState(seedPurchaseOrders); // http: se hidrata con services.pharmacy.listPurchaseOrders()
   // Sin endpoint en el backend (NotImplemented: GET /api/v1/reminders): se conserva el estado local.
@@ -287,14 +294,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         .filter((p) => p !== undefined)
         .filter(
           (p) =>
-            p.clinic !== currentClinic &&
-            !requests.some((r) => r.patientId === p.id && r.from === currentClinic && r.status === "Pendiente")
+            p.clinic !== getCurrentClinic() &&
+            !requests.some((r) => r.patientId === p.id && r.from === getCurrentClinic() && r.status === "Pendiente")
         )
         .map((p) => ({
           id: newId("q"),
           patientId: p.id,
           ownerRut: p.ownerRut,
-          from: currentClinic,
+          from: getCurrentClinic(),
           to: p.clinic,
           requestedBy: currentUser.name,
           date: TODAY,
@@ -469,7 +476,7 @@ export function useAccess(patientId: string) {
   const { grants } = useStore();
   const patient = getPatient(patientId);
   if (!patient) return { level: "ninguno" as const };
-  return accessLevel(patient, grants, currentClinic);
+  return accessLevel(patient, grants, getCurrentClinic());
 }
 
 /** Función para filtrar listas por acceso (propio o compartido vigente). */
@@ -477,13 +484,13 @@ export function useCanView() {
   const { grants } = useStore();
   return (patientId: string) => {
     const patient = getPatient(patientId);
-    return !!patient && accessLevel(patient, grants, currentClinic).level !== "ninguno";
+    return !!patient && accessLevel(patient, grants, getCurrentClinic()).level !== "ninguno";
   };
 }
 
 export function usePendingRequest(patientId: string) {
   const { requests } = useStore();
-  return requests.find((r) => r.patientId === patientId && r.from === currentClinic && r.status === "Pendiente");
+  return requests.find((r) => r.patientId === patientId && r.from === getCurrentClinic() && r.status === "Pendiente");
 }
 
 /** ¿El rol activo tiene este permiso? */
@@ -498,5 +505,5 @@ export function useDoctors() {
   const activeIds = new Set(
     users.filter((u) => u.role === "Veterinario" && u.status === "Activo" && u.doctorId).map((u) => u.doctorId)
   );
-  return doctors.filter((d) => activeIds.has(d.id));
+  return read("doctors", mockDoctors).filter((d) => activeIds.has(d.id));
 }

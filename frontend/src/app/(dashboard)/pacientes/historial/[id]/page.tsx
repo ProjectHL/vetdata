@@ -1,3 +1,6 @@
+"use client";
+
+import { use } from "react";
 import { PageContainer } from "@/components/layout/page-container";
 import Link from "next/link";
 import { notFound } from "next/navigation";
@@ -20,17 +23,19 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { getOwner, getPatient } from "@/lib/lookups";
 import { ownerName } from "@/domain/owners";
 import { patientAge } from "@/domain/patients";
 import { daysUntil, formatDate, formatRut } from "@/lib/format";
+import { useOwners, usePatients } from "@/lib/server-state";
 import { EmptyState } from "@/components/layout/empty-state";
 
-export default async function FichaPage(props: PageProps<"/pacientes/historial/[id]">) {
-  const { id } = await props.params;
-  const patient = getPatient(id);
+export default function FichaPage(props: PageProps<"/pacientes/historial/[id]">) {
+  const { id } = use(props.params);
+  const patients = usePatients();
+  const owners = useOwners();
+  const patient = patients.find((p) => p.id === id);
   if (!patient) notFound();
-  const owner = getOwner(patient.ownerRut)!;
+  const owner = owners.find((o) => o.rut === patient.ownerRut)!;
 
   const consultations = [...patient.consultations].sort((a, b) => b.date.localeCompare(a.date));
 

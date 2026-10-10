@@ -1,11 +1,18 @@
-import { getOwner, patients } from "@/lib/lookups";
 import { type Patient, type Vaccine } from "@/domain/patients";
 import { type AccessGrant, accessLevel } from "@/domain/sharing";
 import { daysUntil } from "@/lib/format";
+import { read } from "@/lib/server-state";
+import { owners as mockOwners } from "@/mocks/owners";
+import { patients as mockPatients } from "@/mocks/patients";
+
+/** TODO(api): services.owners.get(rut) */
+function getOwner(rut: string) {
+  return read("owners", mockOwners).find((o) => o.rut === rut);
+}
 
 /** Universo de "mi clínica": propios + compartidos vigentes (misma regla que el resto del producto). */
 export function visiblePatients(grants: AccessGrant[], clinic: string) {
-  return patients.filter((p) => accessLevel(p, grants, clinic).level !== "ninguno");
+  return read("patients", mockPatients).filter((p) => accessLevel(p, grants, clinic).level !== "ninguno");
 }
 
 export type VaccineState = "vencida" | "próxima" | "vigente";

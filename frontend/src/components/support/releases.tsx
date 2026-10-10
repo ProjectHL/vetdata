@@ -4,14 +4,16 @@ import Link from "next/link";
 import { Bug, Lightbulb, Sparkles, Wrench } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { releases } from "@/lib/lookups";
+import { type Release } from "@/domain/support";
 import { formatDate } from "@/lib/format";
+import { useLiveList } from "@/lib/server-state";
 import { useSupport } from "@/lib/support-store";
 
 const typeIcon = { Nuevo: Sparkles, Mejora: Wrench, Corrección: Bug } as const;
 
 export function Releases() {
   const { ideas } = useSupport();
+  const releases = useLiveList<Release>("releases");
   return (
     <div className="flex flex-col gap-4">
       {releases.map((r, idx) => (

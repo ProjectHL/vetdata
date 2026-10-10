@@ -25,11 +25,12 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { doctors, getOwner, getPatient } from "@/lib/lookups";
+import { type Doctor } from "@/domain/clinic";
 import { ownerName } from "@/domain/owners";
 import { type AccessKind, WAITING_CAPACITY } from "@/domain/security";
 import { NOW_TIME, TODAY, formatCLP, minutesSince } from "@/lib/format";
 import { expectedArrivals } from "@/lib/metrics/day";
+import { useDoctorsAll, useOwners, usePatients } from "@/lib/server-state";
 import { useRetail } from "@/lib/retail-store";
 import { useSecurity } from "@/lib/security-store";
 import { useStore } from "@/lib/store";
@@ -39,7 +40,9 @@ import { CameraDialog } from "./camera-dialog";
 import { CameraGrid, CameraTile } from "./camera-tile";
 import { EmptyState } from "@/components/layout/empty-state";
 
-const doctorName = (id: string) => doctors.find((d) => d.id === id)?.name ?? "";
+function doctorName(doctors: Doctor[], id?: string) {
+  return doctors.find((d) => d.id === id)?.name ?? "";
+}
 
 // ---------------------------------------------------------------- Hall
 
@@ -48,6 +51,11 @@ const KINDS: AccessKind[] = ["Cliente", "Proveedor", "Courier", "Personal"];
 export function HallZone() {
   const { cameras, access, waiting, devices, checkIn, toggleLock } = useSecurity();
   const { appointments, clinicProfile, rooms } = useStore();
+  const doctors = useDoctorsAll();
+  const patients = usePatients();
+  const owners = useOwners();
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
   const [kind, setKind] = useState<"all" | AccessKind>("all");
   const door = devices.find((d) => d.id === "dv-door-main")!;
 
@@ -96,7 +104,7 @@ export function HallZone() {
                   <SpeciesIcon species={p.species} className="size-4 text-primary" />
                   <div className="min-w-0 flex-1">
                     <p className="font-medium">{a.time} · {p.name}</p>
-                    <p className="truncate text-xs text-muted-foreground">{ownerName(o)} · {doctorName(a.doctorId)}</p>
+                    <p className="truncate text-xs text-muted-foreground">{ownerName(o)} · {doctorName(doctors, a.doctorId)}</p>
                   </div>
                   <Button size="sm" variant="outline" onClick={() => checkIn(a.id)}>
                     <LogIn /> Llegó
@@ -177,6 +185,11 @@ export function HallZone() {
 export function WaitingZone() {
   const { cameras, waiting, callFromWaiting } = useSecurity();
   const { appointments, rooms } = useStore();
+  const doctors = useDoctorsAll();
+  const patients = usePatients();
+  const owners = useOwners();
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
+  const getOwner = (rut: string) => owners.find((o) => o.rut === rut);
   const people = waiting.reduce((s, w) => s + w.people, 0);
   const pct = Math.round((people / WAITING_CAPACITY) * 100);
   const freeBoxes = rooms.filter((r) => r.kind === "box" && r.status === "disponible");
@@ -224,7 +237,7 @@ export function WaitingZone() {
                 title={`${p.name} · ${ownerName(o)}`}
                 species={p.species}
                 patientId={p.id}
-                info={`Llegó ${w.arrivedAt} · cita ${appt.time} con ${doctorName(appt.doctorId)} · ${appt.reason}`}
+                info={`Llegó ${w.arrivedAt} · cita ${appt.time} con ${doctorName(doctors, appt.doctorId)} · ${appt.reason}`}
                 minutes={minutes}
                 late={appt.time < NOW_TIME}
                 alert={w.alert}
@@ -302,6 +315,8 @@ function WaitingRow({
 export function BoxesZone() {
   const { cameras, settings } = useSecurity();
   const { rooms } = useStore();
+  const doctors = useDoctorsAll();
+  const patients = usePatients();
   const boxCams = cameras.filter((c) => c.zone === "boxes");
 
   return (
@@ -319,7 +334,7 @@ export function BoxesZone() {
           const room = rooms.find((r) => r.id === cam.roomId);
           const meta = room ? statusMeta[room.status] : undefined;
           const KindIcon = room ? kindIcon[room.kind] : null;
-          const patient = getPatient(room?.patientId ?? "");
+          const patient = patients.find((p) => p.id === (room?.patientId ?? ""));
           return (
             <Card key={cam.id} className="gap-3 py-4">
               <CardContent className="flex flex-col gap-3 px-4">
@@ -334,7 +349,7 @@ export function BoxesZone() {
                 <CameraTile camera={cam} />
                 <p className="text-xs text-muted-foreground">
                   {room?.status === "ocupado" && patient
-                    ? `${doctorName(room.doctorId ?? "")} con ${patient.name} desde las ${room.since}`
+                    ? `${doctorName(doctors, room.doctorId ?? "")} con ${patient.name} desde las ${room.since}`
                     : room?.status === "limpieza"
                       ? `En limpieza desde las ${room.since}`
                       : "Disponible"}

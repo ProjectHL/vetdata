@@ -28,9 +28,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
-import { doctors, getPatient } from "@/lib/lookups";
+import { type Doctor } from "@/domain/clinic";
 import { type Camera, ZONES } from "@/domain/security";
 import { NOW_TIME, TODAY } from "@/lib/format";
+import { useDoctorsAll, usePatients } from "@/lib/server-state";
 import { usePrivacy, useSecurity } from "@/lib/security-store";
 import { useCan } from "@/lib/store";
 import { useSupport } from "@/lib/support-store";
@@ -38,14 +39,21 @@ import { cn } from "@/lib/utils";
 import { CameraStatusBadge } from "./badges";
 import { CameraFeed, type FeedView } from "./camera-feed";
 
+function doctorById(doctors: Doctor[], id?: string) {
+  return doctors.find((d) => d.id === id);
+}
+
 /** Qué puede ver el usuario actual de una cámara, según estado, permisos y privacidad. */
 export function useCameraView(camera: Camera): { view: FeedView; overlay?: string } {
   const can = useCan();
   const { private: isPrivate, room } = usePrivacy(camera);
+  const doctors = useDoctorsAll();
+  const patients = usePatients();
+  const getPatient = (id: string) => patients.find((p) => p.id === id);
   if (camera.status !== "En línea") return { view: "offline" };
   if (!can("seguridad.ver") || (camera.zone === "boxes" && !can("seguridad.boxes"))) return { view: "locked" };
   if (isPrivate) {
-    const doctor = doctors.find((d) => d.id === room?.doctorId);
+    const doctor = doctorById(doctors, room?.doctorId);
     const patient = getPatient(room?.patientId ?? "");
     return { view: "private", overlay: `Atención en curso${doctor ? ` · ${doctor.name}` : ""}${patient ? ` con ${patient.name}` : ""}` };
   }

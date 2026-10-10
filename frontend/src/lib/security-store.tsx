@@ -17,8 +17,6 @@ import type {
   Zone,
 } from "@/domain/security";
 import {
-  getOwner,
-  getPatient,
   seedAccess,
   seedAudit,
   seedCameras,
@@ -26,7 +24,10 @@ import {
   seedEvents,
   seedSecuritySettings,
   seedWaiting,
-} from "@/lib/lookups";
+} from "@/mocks/security";
+import { owners as mockOwners } from "@/mocks/owners";
+import { patients as mockPatients } from "@/mocks/patients";
+import { read } from "@/lib/server-state";
 import { dataSource, runInBackground, services } from "@/services";
 import { NOW_ISO, NOW_TIME } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -62,6 +63,16 @@ const SecurityContext = createContext<SecurityStore | null>(null);
 
 let seq = 0;
 const newId = (prefix: string) => `${prefix}-new-${++seq}`;
+
+/** TODO(api): services.patients.get(id) */
+function getPatient(id: string) {
+  return read("patients", mockPatients).find((p) => p.id === id);
+}
+
+/** TODO(api): services.owners.get(rut) */
+function getOwner(rut: string) {
+  return read("owners", mockOwners).find((o) => o.rut === rut);
+}
 
 export function SecurityProvider({ children }: { children: React.ReactNode }) {
   const { currentUser, role, appointments, updateRoom } = useStore();

@@ -1,9 +1,21 @@
-import { getOwner, petsOf } from "@/lib/lookups";
+import { read } from "@/lib/server-state";
+import { owners as mockOwners } from "@/mocks/owners";
+import { patients as mockPatients } from "@/mocks/patients";
 import { CATEGORIES, IVA, type PaymentMethod, type Product, type Sale, type Shipment, SHIPMENT_FLOW } from "@/domain/retail";
 import { TODAY } from "@/lib/format";
 
 const net = (gross: number) => gross / (1 + IVA);
 const DAYS = 14;
+
+/** TODO(api): services.owners.get(rut) */
+function getOwner(rut: string) {
+  return read("owners", mockOwners).find((o) => o.rut === rut);
+}
+
+/** TODO(api): services.patients.listByOwner(rut) */
+function petsOf(ownerRut: string) {
+  return read("patients", mockPatients).filter((p) => p.ownerRut === ownerRut);
+}
 
 export function retailKpis(sales: Sale[], products: Product[]) {
   const today = sales.filter((s) => s.date === TODAY);
