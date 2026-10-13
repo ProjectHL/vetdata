@@ -1,0 +1,78 @@
+# VetData — compose para Dokploy (primer deploy).
+# NO publica puertos host: Dokploy ocupa el 3000 para su propio panel y
+# enruta por dominios (Traefik), así que publicar `${PORT:-3000}:3000`,
+# `4000:4000` o `5435:5432` falla con `Bind for :::3000 failed: port is
+# already allocated`. El tráfico es interno vía nombres de servicio
+# (`web` -> `api:4000` -> `db:5432`); los dominios públicos de web y api
+# se asignan en la UI de Dokploy, no en este archivo.
+# Uso en Dokploy: compose path `infra/docker-compose.dokploy.yml`.
+# NOTA: `NEXT_PUBLIC_*` se bakea en el build del front; cambiar
+# `NEXT_PUBLIC_API_URL` exige rebuild (no basta con reiniciar).
+# El compose local `infra/docker-compose.yml` queda intacto para `localhost`.
+name: vetdata
+
+services:
+  web:
+    build:
+      context: ../frontend
+      args:
+        NEXT_PUBLIC_DATA_SOURCE: ${NEXT_PUBLIC_DATA_SOURCE:-mock}
+        # Default interno (tráfico contenedor-a-contenedor); en Dokploy se
+        # fija a la URL pública de la api, lo que exige rebuild.
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://api:4000}
+    expose:
+      - "3000"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://127.0.0.1:3000/login || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  api:
+    build:
+      context: ../backend
+    environment:
+      - PORT=4000
+      - DATABASE_URL=${DATABASE_URL:-postgresql://vetdata:vetdata@db:5432/vetdata}
+      - PUBLIC_WEB_URL=${PUBLIC_WEB_URL:-http://localhost:3000}
+      - APP_ENV=${APP_ENV:-development}
+      - SMTP_ADDR=${SMTP_ADDR:-}
+      - SMTP_FROM=${SMTP_FROM:-VetData <noreply@example.test>}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_ALLOW_PLAIN=${SMTP_ALLOW_PLAIN:-false}
+      - OUTBOX_KEY=${OUTBOX_KEY:-}
+    expose:
+      - "4000"
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:4000/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: vetdata
+      POSTGRES_PASSWORD: vetdata
+      POSTGRES_DB: vetdata
+    volumes:
+      - vetdata_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vetdata -d vetdata"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  vetdata_postgres_data:
