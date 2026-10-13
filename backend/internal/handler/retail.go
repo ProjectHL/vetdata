@@ -21,10 +21,12 @@ func (s *Server) retailRoutes(m *http.ServeMux) {
 
 const saleSelect = `SELECT s.id,s.number,s.owner_id AS "ownerId",s.payment,s.delivery_fee_net AS "deliveryFeeNet",
  s.net,s.vat,s.total,s.channel,s.actor_id AS "actorId",s.created_at AS "createdAt",
+ (SELECT o.rut FROM owners o WHERE o.id=s.owner_id) AS "ownerRut",
  (SELECT coalesce(jsonb_agg(jsonb_build_object('id',l.id,'itemId',l.item_id,'qty',l.qty,'unitPriceNet',l.unit_price_net) ORDER BY l.id),'[]') FROM retail_sale_lines l WHERE l.sale_id=s.id) AS items FROM retail_sales s`
 
 const shipmentSelect = `SELECT h.id,h.sale_id AS "saleId",h.owner_id AS "ownerId",h.address,h.sector,h.courier,
- to_char(h.scheduled_for,'YYYY-MM-DD') AS "scheduledFor",h.delivered_at AS "deliveredAt",h.status,h.created_at AS "createdAt" FROM shipments h`
+ to_char(h.scheduled_for,'YYYY-MM-DD') AS "scheduledFor",h.delivered_at AS "deliveredAt",h.status,h.created_at AS "createdAt",
+ (SELECT o.rut FROM owners o WHERE o.id=h.owner_id) AS "ownerRut" FROM shipments h`
 
 func saleJSON(ctx context.Context, tx pgx.Tx, clinic, id string) (json.RawMessage, error) {
 	var raw []byte

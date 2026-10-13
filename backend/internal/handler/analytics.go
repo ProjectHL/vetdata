@@ -950,7 +950,9 @@ func (s *Server) analyticsBoxOccupancy(w http.ResponseWriter, r *http.Request) e
 	type agg struct{ total, busy int }
 	byRoom := map[string]*agg{}
 	rows, err = s.pool.Query(r.Context(), `SELECT room_id,status FROM room_history
-	 WHERE clinic_id=$1 AND created_at>=$2 AND created_at<$3`, a.ClinicID, from, to.AddDate(0, 0, 1))
+	 WHERE clinic_id=$1
+	 AND created_at >= ($2::date::timestamp AT TIME ZONE 'America/Santiago')
+	 AND created_at < (($3::date+1)::timestamp AT TIME ZONE 'America/Santiago')`, a.ClinicID, fromS, toS)
 	if err != nil {
 		return err
 	}

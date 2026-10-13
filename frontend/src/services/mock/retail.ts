@@ -62,8 +62,8 @@ export const retail: RetailService = {
   },
   listMovements: () => ok(db.retailMovements),
   transferToSala: (productId, qty) =>
-    ok(record([{ productId, type: "Transferencia", reason: "Reposición sala", location: "sala", from: "central", qty }])[0]),
-  adjust: ({ productId, location, qty, reason }) => ok(record([{ productId, type: "Ajuste", reason, location, qty }])[0]),
+    ok(record([{ productId, type: "Transferencia", reason: "Reposición sala", location: "sala", from: "central", qty }])[0]).then(() => undefined),
+  adjust: ({ productId, location, qty, reason }) => ok(record([{ productId, type: "Ajuste", reason, location, qty }])[0]).then(() => undefined),
   listOrders: () => ok(db.retailOrders),
   createOrder: ({ supplierId, items, leadTimeDays }) => {
     const order = {

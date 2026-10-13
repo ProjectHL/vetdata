@@ -17,7 +17,7 @@
  * hidratación: su `setState` posterior re-renderiza el árbol y los
  * consumidores de `lib/` ya ven datos del servidor. Cada endpoint se
  * publica por separado (allSettled): si uno falla, los demás igual se
- * actualizan y la semilla queda como fallback. Nunca lanza.
+ * actualizan. Un fallo deja la lista vacía y se informa en consola.
  *
  * T5-3c: los componentes ya no importan `@/mocks` ni llaman a `read`
  * directo (solo `lib/` lee semillas). Leen los catálogos con los hooks de
@@ -44,6 +44,7 @@ import {
   type VaccineCoverage,
 } from "@/domain/metrics";
 import { dataSource, services } from "@/services";
+import type { Permission } from "@/domain/settings";
 // Semillas: cada lector de `src/lib` importa su propia semilla de
 // `@/mocks` como fallback de `read`/`readScalar`. Los componentes leen
 // los catálogos con los hooks de abajo, nunca con imports directos a `@/mocks`.
@@ -96,6 +97,17 @@ export type ServerStateKey =
   | "boxOccupancy";
 
 const lists = new Map<string, unknown[]>();
+
+/** Vacía datos del tenant anterior antes de iniciar otra sesión o reintentar la carga. */
+export function resetServerCatalogs(): void {
+  if (!isServerMode) return;
+  for (const [key, list] of lists) {
+    list.length = 0;
+    notifyList(key);
+  }
+  scalars.clear();
+  scalarListeners.get("currentClinic")?.forEach((fn) => fn(""));
+}
 // Suscripciones por lista (T5-3c): `publish` avisa y los hooks re-renderizan.
 // `publish` sincroniza en el lugar (misma referencia), así que cada clave
 // lleva un contador de versión: es lo que observa el hook.
@@ -125,14 +137,14 @@ function notifyList(key: string): void {
 }
 
 /**
- * Lee la lista viva de una clave, sembrada con el fallback en modo http.
+ * Lee la lista viva de una clave, vacía hasta recibir la API en modo http.
  * En modo mock devuelve el fallback tal cual (sin copiar).
  */
 export function read<T>(key: ServerStateKey, fallback: readonly T[]): T[] {
   if (!isServerMode) return fallback as T[];
   let live = lists.get(key) as T[] | undefined;
   if (!live) {
-    live = [...fallback];
+    live = [];
     lists.set(key, live);
   }
   return live;
@@ -164,7 +176,7 @@ const scalarListeners = new Map<string, Set<(value: unknown) => void>>();
 
 export function readScalar<T>(key: string, fallback: T): T {
   if (!isServerMode) return fallback;
-  return (scalars.has(key) ? scalars.get(key) : fallback) as T;
+  return (scalars.has(key) ? scalars.get(key) : "") as T;
 }
 
 export function publishScalar<T>(key: string, value: T): void {
@@ -330,7 +342,7 @@ export function useBoxOccupancy(): BoxOccupancy[] {
  * TODO(api): services.clinic.listServices()
  */
 export function useBillableServices(): Service[] {
-  return seedBillableServices;
+  return isServerMode ? [] : seedBillableServices;
 }
 
 // ---- Carga de catálogos sin store dueño + series de analytics ----
@@ -351,7 +363,7 @@ export function useBillableServices(): Service[] {
  * provoque. Cada endpoint se resuelve por separado: un fallo solo conserva
  * la semilla de esa clave. Nunca lanza.
  */
-export async function ensureServerCatalogs(): Promise<void> {
+export async function ensureServerCatalogs(permitted: (permission: Permission) => boolean): Promise<void> {
   if (!isServerMode) return;
   const tasks: { key: ServerStateKey | "currentClinic"; run: () => Promise<unknown> }[] = [
     { key: "patients", run: () => services.patients.list() },
@@ -359,15 +371,17 @@ export async function ensureServerCatalogs(): Promise<void> {
     { key: "doctors", run: () => services.clinic.listDoctors() },
     { key: "networkClinics", run: () => services.network.listClinics() },
     { key: "currentClinic", run: () => services.network.getCurrentClinic() },
-    { key: "suppliers", run: () => services.pharmacy.listSuppliers() },
+    ...(permitted("farmacia.inventario") ? [{ key: "suppliers" as const, run: () => services.pharmacy.listSuppliers() }] : []),
     { key: "monthlyConsults", run: () => services.analytics.monthlyConsults() },
-    { key: "monthlyRevenue", run: () => services.analytics.monthlyRevenue() },
-    { key: "revenueByLine", run: () => services.analytics.revenueByLine() },
+    ...(permitted("reportes.financiero") ? [
+      { key: "monthlyRevenue" as const, run: () => services.analytics.monthlyRevenue() },
+      { key: "revenueByLine" as const, run: () => services.analytics.revenueByLine() },
+    ] : []),
     { key: "vaccineCoverage", run: () => services.analytics.vaccineCoverage() },
     { key: "coverageByVaccine", run: () => services.analytics.coverageByVaccine() },
     { key: "diagnosisCategories", run: () => services.analytics.diagnosisCategories() },
     { key: "networkAlerts", run: () => services.analytics.networkAlerts() },
-    { key: "boxOccupancy", run: () => services.analytics.boxOccupancy() },
+    ...(permitted("reportes.financiero") ? [{ key: "boxOccupancy" as const, run: () => services.analytics.boxOccupancy() }] : []),
   ];
   // `Promise.resolve().then(...)` también atrapa un throw síncrono al construir la promesa.
   const results = await Promise.allSettled(tasks.map((t) => Promise.resolve().then(t.run)));

@@ -19,6 +19,7 @@ import { SLA_HOURS, TICKET_FLOW, type TicketStatus } from "@/domain/support";
 import { formatDateTime, formatHours } from "@/lib/format";
 import { useCan } from "@/lib/store";
 import { useSupport } from "@/lib/support-store";
+import { dataSource } from "@/services";
 import { cn } from "@/lib/utils";
 import { PriorityBadge, SlaIndicator, TicketStatusBadge } from "./shared";
 
@@ -105,9 +106,9 @@ export function TicketDetail({ id }: { id: string }) {
               <div className="flex flex-col gap-2 border-t pt-4">
                 <Textarea aria-label="Respuesta" rows={3} value={reply} onChange={(e) => setReply(e.target.value)} placeholder="Escribe una respuesta para el equipo de VetData" />
                 <div className="flex flex-wrap justify-end gap-2">
-                  <Button variant="outline" onClick={() => simulateSupportReply(ticket.id)}>
+                  {dataSource === "mock" && <Button variant="outline" onClick={() => simulateSupportReply(ticket.id)}>
                     <FlaskConical /> Simular respuesta de soporte
-                  </Button>
+                  </Button>}
                   <Button
                     disabled={!reply.trim()}
                     onClick={() => {

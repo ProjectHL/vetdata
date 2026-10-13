@@ -345,6 +345,38 @@ func TestAnalyticsBoxOccupancy(t *testing.T) {
 	}
 }
 
+func TestAnalyticsBoxOccupancySantiagoBoundaries(t *testing.T) {
+	f := newFixture(t)
+	grantFinanciero(t, f)
+	own := f.login(t)
+	ctx := context.Background()
+	room := domain.UUID()
+	if _, err := f.pool.Exec(ctx, "INSERT INTO rooms(id,clinic_id,name,kind) VALUES($1,$2,'Boundary box','box')", room, f.clinic); err != nil {
+		t.Fatal(err)
+	}
+	loc, err := time.LoadLocation("America/Santiago")
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Date(2026, 10, 10, 0, 0, 0, 0, loc)
+	end := start.AddDate(0, 0, 1)
+	for _, v := range []struct {
+		at     time.Time
+		status string
+	}{
+		{start, "disponible"}, {end.Add(-time.Hour), "ocupado"}, {end.Add(-2 * time.Hour), "ocupado"}, {end.Add(-time.Second), "ocupado"},
+		{start.Add(-time.Second), "ocupado"}, {end, "ocupado"},
+	} {
+		if _, err := f.pool.Exec(ctx, "INSERT INTO room_history(clinic_id,room_id,status,created_at) VALUES($1,$2,$3,$4)", f.clinic, room, v.status, v.at); err != nil {
+			t.Fatal(err)
+		}
+	}
+	rows := analyticsCut(t, f, "/api/v1/analytics/box-occupancy?from=2026-10-10&to=2026-10-10", own)
+	if analyticsByKey(rows, "box")["Boundary box"]["ocupacion"] != 75.0 {
+		t.Fatal(rows)
+	}
+}
+
 func loginOtherAnalytics(t *testing.T, f *fixture) []*http.Cookie {
 	t.Helper()
 	ctx := context.Background()

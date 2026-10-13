@@ -1,0 +1,11 @@
+https://localhost {
+  tls internal
+  handle /api/* {
+    reverse_proxy restored-api:4000 {
+      header_up X-Forwarded-For {remote_host}
+    }
+  }
+  handle {
+    reverse_proxy web:3000
+  }
+}

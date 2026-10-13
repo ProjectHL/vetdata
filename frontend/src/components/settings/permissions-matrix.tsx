@@ -6,6 +6,7 @@ import { Field } from "@/components/care-actions/field";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { dataSource } from "@/services";
 import {
   Select,
   SelectContent,
@@ -31,6 +32,9 @@ export function PermissionsMatrix() {
   const { rolePermissions, togglePermission, role } = useStore();
   const can = useCan();
   const editable = can("usuarios.administrar");
+  const displayedPermissions = PERMISSIONS.filter((p) => dataSource === "http"
+    ? p.id !== "red.aprobar" && p.id !== "red.revocar"
+    : p.id !== "red.suspender");
 
   return (
     <Card>
@@ -38,7 +42,7 @@ export function PermissionsMatrix() {
         <CardTitle>Roles y permisos</CardTitle>
         <CardDescription>
           {editable
-            ? "Los cambios se aplican al instante en todo VetData. Prueba cambiar de rol en el menú del avatar (Ver como)."
+            ? (dataSource === "http" ? "Los cambios de permisos se guardan en la clínica activa." : "Los cambios se aplican al instante en todo VetData. Prueba cambiar de rol en el menú del avatar (Ver como).")
             : `Estás viendo como ${role}: solo Admin puede modificar permisos.`}
         </CardDescription>
       </CardHeader>
@@ -63,7 +67,7 @@ export function PermissionsMatrix() {
                     {area}
                   </TableCell>
                 </TableRow>
-                {PERMISSIONS.filter((p) => p.area === area).map((p) => (
+                {displayedPermissions.filter((p) => p.area === area).map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="whitespace-normal">
                       <p className="font-medium">{p.label}</p>
@@ -102,6 +106,18 @@ export function SharingPolicyCard() {
   const { sharingPolicy, setSharingPolicy } = useStore();
   const can = useCan();
   const editable = can("usuarios.administrar");
+
+  if (dataSource === "http") {
+    return <Card>
+      <CardHeader>
+        <CardTitle>Compartición en la red</CardTitle>
+        <CardDescription>El dueño autoriza cada solicitud mediante un enlace de un solo uso. La clínica de origen recibe la notificación y puede suspender un acceso con causa.</CardDescription>
+      </CardHeader>
+      <CardContent className="text-sm text-muted-foreground">
+        La configuración de valores por defecto de la clínica aún no tiene un endpoint persistente.
+      </CardContent>
+    </Card>;
+  }
 
   return (
     <Card>

@@ -44,3 +44,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Production runtime material (never commit secrets or database exports)
+/infra/secrets/
+/infra/backups/
+*.dump

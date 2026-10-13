@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { Bell, Eye, LifeBuoy, LogOut, Menu, Search, Settings, User } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { CommandPalette, SearchTrigger, useCommandPaletteShortcut } from "@/components/search/command-palette";
@@ -27,8 +27,11 @@ import { ROLES, type Role } from "@/domain/settings";
 import { findByPath } from "@/lib/nav";
 import { useCurrentClinic } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
+import { dataSource } from "@/services";
+import { apiFetch } from "@/services/http/client";
 
 export function Topbar() {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [reporting, setReporting] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -104,7 +107,7 @@ export function Topbar() {
           defaultModule={item ? moduleLabel(channel.title, item.title) : undefined}
           route={pathname}
         />
-        <Badge variant="outline" className="hidden sm:inline-flex" title="Rol con el que estás viendo el prototipo">
+        <Badge variant="outline" className="hidden sm:inline-flex" title={dataSource === "mock" ? "Rol de la demo" : "Rol de tu sesión"}>
           <Eye /> {role}
         </Badge>
         <DropdownMenu>
@@ -121,13 +124,15 @@ export function Topbar() {
               <div className="text-xs font-normal text-muted-foreground">{currentUser.role} · {currentClinic}</div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Ver como (demo de roles)</DropdownMenuLabel>
-            <DropdownMenuRadioGroup value={role} onValueChange={(v) => setRole(v as Role)}>
-              {ROLES.map((r) => (
-                <DropdownMenuRadioItem key={r} value={r}>{r}</DropdownMenuRadioItem>
-              ))}
-            </DropdownMenuRadioGroup>
-            <DropdownMenuSeparator />
+            {dataSource === "mock" && <>
+              <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Ver como (demo de roles)</DropdownMenuLabel>
+              <DropdownMenuRadioGroup value={role} onValueChange={(v) => setRole(v as Role)}>
+                {ROLES.map((r) => (
+                  <DropdownMenuRadioItem key={r} value={r}>{r}</DropdownMenuRadioItem>
+                ))}
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+            </>}
             <DropdownMenuItem asChild>
               <Link href="/ajustes/perfil"><User /> Perfil</Link>
             </DropdownMenuItem>
@@ -135,8 +140,11 @@ export function Topbar() {
               <Link href="/ajustes/permisos"><Settings /> Roles y permisos</Link>
             </DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem asChild>
-              <Link href="/login"><LogOut /> Cerrar sesión</Link>
+            <DropdownMenuItem onSelect={() => {
+              if (dataSource === "http") void apiFetch("/api/v1/auth/logout", { method: "POST" }).catch(() => undefined).finally(() => router.replace("/login"));
+              else router.replace("/login");
+            }}>
+              <LogOut /> Cerrar sesión
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

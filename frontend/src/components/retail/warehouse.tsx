@@ -34,6 +34,7 @@ import {
 import { LOCATIONS, type Location, type Product, type RetailMovementType, stockLevel } from "@/domain/retail";
 import { formatCLP, formatDate } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
+import { dataSource } from "@/services";
 import { cn } from "@/lib/utils";
 import { ProductThumb, StockLevelBadge } from "./shared";
 
@@ -277,11 +278,18 @@ function AdjustDialog({ product, onClose }: { product: Product | null; onClose: 
   const [location, setLocation] = useState<Location>("sala");
   const [reason, setReason] = useState<"Merma" | "Conteo">("Conteo");
   const [counted, setCounted] = useState<number | "">("");
+  const [lotId, setLotId] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
   if (!product) return <Dialog open={false} />;
-  const current = product.stock[location];
+  const lots = product.lots?.filter((lot) => lot.location === location) ?? [];
+  const selectedLot = lots.find((lot) => lot.id === lotId);
+  const current = dataSource === "http" ? selectedLot?.qty ?? 0 : product.stock[location];
   const delta = counted === "" ? 0 : reason === "Conteo" ? counted - current : -counted;
+  const valid = counted !== "" && Number.isInteger(counted) && delta !== 0 && current + delta >= 0 && (dataSource !== "http" || !!selectedLot);
+  const close = () => { setCounted(""); setLotId(""); setError(""); onClose(); };
   return (
-    <Dialog open onOpenChange={(o) => !o && onClose()}>
+    <Dialog open onOpenChange={(o) => !o && !saving && close()}>
       <DialogContent className="sm:max-w-sm">
         <DialogHeader>
           <DialogTitle>Ajustar inventario</DialogTitle>
@@ -289,7 +297,7 @@ function AdjustDialog({ product, onClose }: { product: Product | null; onClose: 
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Ubicación">
-            <Select value={location} onValueChange={(v) => setLocation(v as Location)}>
+            <Select value={location} onValueChange={(v) => { setLocation(v as Location); setLotId(""); setCounted(""); }}>
               <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="sala">{LOCATIONS.sala}</SelectItem>
@@ -306,22 +314,36 @@ function AdjustDialog({ product, onClose }: { product: Product | null; onClose: 
               </SelectContent>
             </Select>
           </Field>
-          <Field label={reason === "Conteo" ? `Contado (sistema: ${current})` : "Unidades dañadas"} htmlFor="adj-n" className="col-span-2">
-            <Input id="adj-n" type="number" min={0} value={counted} onChange={(e) => setCounted(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))} />
-          </Field>
         </div>
+        {dataSource === "http" && <Field label="Lote">
+          <Select value={lotId} onValueChange={(value) => { setLotId(value); setCounted(""); setError(""); }}>
+            <SelectTrigger className="w-full"><SelectValue placeholder="Selecciona un lote" /></SelectTrigger>
+            <SelectContent>{lots.map((lot) => <SelectItem key={lot.id} value={lot.id}>{lot.lot} · {lot.qty} unidades · {lot.expiry ?? "sin vencimiento"}</SelectItem>)}</SelectContent>
+          </Select>
+        </Field>}
+        <Field label={reason === "Conteo" ? `Contado (lote: ${current})` : "Unidades dañadas"} htmlFor="adj-n">
+          <Input id="adj-n" type="number" min={0} max={reason === "Merma" ? current : undefined} value={counted} onChange={(e) => setCounted(e.target.value === "" ? "" : Math.max(0, Number(e.target.value)))} />
+        </Field>
         {counted !== "" && <p className="text-sm text-muted-foreground">Diferencia a registrar: <strong className="text-foreground tabular-nums">{delta > 0 ? `+${delta}` : delta}</strong></p>}
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" disabled={saving} onClick={close}>Cancelar</Button>
           <Button
-            disabled={counted === "" || delta === 0}
-            onClick={() => {
-              adjust(product.id, location, delta, reason);
-              setCounted("");
-              onClose();
+            disabled={!valid || saving}
+            onClick={async () => {
+              setSaving(true);
+              setError("");
+              try {
+                await adjust(product.id, location, delta, reason, selectedLot?.id);
+                close();
+              } catch (cause) {
+                setError(cause instanceof Error ? cause.message : "No se pudo registrar el ajuste.");
+              } finally {
+                setSaving(false);
+              }
             }}
           >
-            Registrar
+            {saving ? "Registrando…" : "Registrar"}
           </Button>
         </DialogFooter>
       </DialogContent>

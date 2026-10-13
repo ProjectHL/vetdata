@@ -3,10 +3,9 @@ import type { Patient } from "./patients";
 
 /**
  * Lógica de datos compartidos (3 reglas):
- * 1. Cada mascota tiene una clínica de origen (patient.clinic), dueña del dato.
- * 2. Otra clínica solo ve la ficha si tiene un acceso vigente, que se obtiene
- *    solicitándolo a la clínica de origen (con consentimiento del dueño).
- * 3. Todo acceso tiene alcance y vigencia, y el origen puede revocarlo.
+ * 1. Cada mascota tiene una clínica de origen (patient.clinic), custodia del dato.
+ * 2. Otra clínica solo ve la ficha si tiene un acceso vigente autorizado por el dueño.
+ * 3. Todo acceso tiene alcance y vigencia; el origen puede suspenderlo con causa.
  */
 
 export type AccessScope = "Ficha completa" | "Resumen clínico";
@@ -24,15 +23,15 @@ export function durationLabel(d: AccessDuration) {
   return DURATIONS.find((x) => x.value === d)!.label;
 }
 
-export type RequestStatus = "Pendiente" | "Aprobada" | "Rechazada";
+export type RequestStatus = "Pendiente" | "Esperando dueño" | "Aprobada" | "Rechazada" | "Denegada" | "Expirada" | "Cancelada";
 
 export type AccessRequest = {
   id: string;
   patientId: string;
-  ownerRut: string;
+  ownerRut?: string;
   /** Clínica que pide el acceso. */
   from: string;
-  /** Clínica de origen de la mascota (la que aprueba). */
+  /** Clínica de origen de la mascota (recibe notificación, no aprueba). */
   to: string;
   requestedBy: string;
   date: string;
@@ -53,13 +52,16 @@ export type AccessGrant = {
   /** null = permanente. */
   until: string | null;
   revoked: boolean;
+  suspended?: boolean;
+  suspensionReason?: string | null;
 };
 
-export type GrantStatus = "Vigente" | "Vencido" | "Revocado";
+export type GrantStatus = "Vigente" | "Vencido" | "Suspendido" | "Revocado";
 
 export function grantStatus(g: AccessGrant, today = TODAY): GrantStatus {
   if (g.revoked) return "Revocado";
   if (g.until && g.until < today) return "Vencido";
+  if (g.suspended) return "Suspendido";
   return "Vigente";
 }
 

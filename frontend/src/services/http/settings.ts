@@ -11,6 +11,18 @@ const toMeta = (t: { assignee?: string | null; done?: boolean }): TaskMeta => ({
   done: t.done,
 });
 
+type ApiClinicProfile = Partial<Record<keyof ClinicProfile, string | number | null>>;
+const toClinicProfile = (profile: ApiClinicProfile): ClinicProfile => ({
+  legalName: String(profile.legalName ?? ""),
+  rut: String(profile.rut ?? ""),
+  address: String(profile.address ?? ""),
+  sector: String(profile.sector ?? ""),
+  phone: String(profile.phone ?? ""),
+  email: String(profile.email ?? ""),
+  hours: "",
+  boxes: 0,
+});
+
 export const settings: SettingsService = {
   /** GET /api/v1/me — el backend devuelve {user, clinic, permissions, memberships}. */
   getCurrentUser: () => apiFetch<{ user: User }>("/api/v1/me").then((res) => res.user),
@@ -33,10 +45,20 @@ export const settings: SettingsService = {
     });
   },
   /** GET /api/v1/settings/clinic-profile */
-  getClinicProfile: () => apiFetch<ClinicProfile>("/api/v1/settings/clinic-profile"),
+  getClinicProfile: () => apiFetch<ApiClinicProfile>("/api/v1/settings/clinic-profile").then(toClinicProfile),
   /** PUT /api/v1/settings/clinic-profile */
   updateClinicProfile: (profile) =>
-    apiFetch<ClinicProfile>("/api/v1/settings/clinic-profile", { method: "PUT", body: profile }),
+    apiFetch<ApiClinicProfile>("/api/v1/settings/clinic-profile", {
+      method: "PUT",
+      body: {
+        legalName: profile.legalName,
+        rut: profile.rut,
+        address: profile.address,
+        sector: profile.sector,
+        phone: profile.phone,
+        email: profile.email,
+      },
+    }).then(toClinicProfile),
   /** GET /api/v1/settings/sharing-policy — FALTANTE: sin endpoint en el backend. */
   getSharingPolicy: async (): Promise<SharingPolicy> => {
     throw new NotImplementedError("GET /api/v1/settings/sharing-policy");

@@ -51,9 +51,9 @@ const REPLIES = [
 ];
 
 export function SupportProvider({ children }: { children: React.ReactNode }) {
-  const { currentUser, role } = useStore();
-  const [tickets, setTickets] = useState(seedTickets); // http: se hidrata con services.support.listTickets()
-  const [ideas, setIdeas] = useState(seedIdeas); // http: se hidrata con services.support.listIdeas()
+  const { currentUser, role, rolePermissions } = useStore();
+  const [tickets, setTickets] = useState(dataSource === "http" ? [] : seedTickets);
+  const [ideas, setIdeas] = useState(dataSource === "http" ? [] : seedIdeas);
   // Catálogo publicado al registro de lib (no se expone: la UI lo lee vía useLiveList("releases") de server-state).
   const [releases, setReleases] = useState<Release[]>(read("releases", mockReleases)); // http: se hidrata con services.support.listReleases()
 
@@ -66,7 +66,7 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
     if (dataSource !== "http") return;
     try {
       const [ticketsData, ideasData, releasesData] = await Promise.all([
-        services.support.listTickets(),
+        rolePermissions[currentUser.role]?.includes("soporte.crear") ? services.support.listTickets() : Promise.resolve([]),
         services.support.listIdeas(),
         services.support.listReleases(),
       ]);
@@ -80,7 +80,7 @@ export function SupportProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser.role, rolePermissions]);
 
   useEffect(() => {
     // Hidratación inicial al montar: el fetch resuelve en continuaciones async, no es un render en cascada.

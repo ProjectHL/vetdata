@@ -121,10 +121,10 @@ Suite Docker/Postgres aislada ejecutada con salida 0. [Evidencia, contratos y br
 
 | Aceptada | Tarea | Estado | Evidencia actual / exigida | Revisión y observaciones |
 |---|---|---|---|---|
-| [ ] | T7-1 | pendiente | Sin evidencia funcional registrada. Exigir: Certificación/sandbox aprobados; reintento y callback duplicado no emiten dos documentos. | Pendiente de revisión. |
-| [ ] | T7-2 | pendiente | Sin evidencia funcional registrada. Exigir: Exportación aislada; anonimización preserva registros que deban retenerse; validación de responsables antes de ejecutar. | Pendiente de revisión. |
-| [ ] | T7-3 | pendiente | Sin evidencia funcional registrada. Exigir: Dry-run con conteos verificables; sin borrado automático para categorías sin política aprobada. | Pendiente de revisión. |
-| [ ] | T7-4 | pendiente | Sin evidencia funcional registrada. Exigir: Restauración en entorno limpio, reinicio y rollback de app demostrados; smoke test HTTPS y responsables operativos. | Pendiente de revisión. |
+| [ ] | T7-1 | en curso | Contrato, migración 014, fake exclusivo de tests y suite PostgreSQL verde el 2026-10-12; [evidencia](evidencia-fase-07.md). | Preparación local; adaptador/certificación trasladados a T8-7 por decisión del 2026-10-12. |
+| [ ] | T7-2 | en curso | Exportación por clínica, simulación read-only y suite PostgreSQL verde el 2026-10-12; [evidencia](evidencia-fase-07.md). | Anonimización real deshabilitada por D-07. |
+| [ ] | T7-3 | en curso | Política retention-v1, simulación y suite PostgreSQL verde el 2026-10-12; [evidencia](evidencia-fase-07.md). | D-01/D-07 sin resolver. |
+| [ ] | T7-4 | en curso | Compose, bootstrap, backup/restore, alertas controladas y smoke de login/recarga/logout/2FA local. Repetición 2026-10-13: suite PostgreSQL, build productivo y ensayo HTTPS con Next.js real detrás de Caddy verdes; [evidencia](evidencia-fase-07.md). | VPS, TLS público, SMTP/canal externo, rollback de releases reales y piloto pendientes. |
 
 ## Fase 8 — Integraciones posteriores al MVP
 
@@ -138,6 +138,7 @@ Suite Docker/Postgres aislada ejecutada con salida 0. [Evidencia, contratos y br
 | [ ] | T8-4 | pendiente | Sin evidencia funcional registrada. Exigir: Enlace vencido, origen directo inaccesible, box privado y permiso insuficiente; dispositivos reales verificados. | Pendiente de revisión. |
 | [ ] | T8-5 | pendiente | Sin evidencia funcional registrada. Exigir: Firma y vigencia verificables; no habilitar sin validación externa necesaria. | Pendiente de revisión. |
 | [ ] | T8-6 | pendiente | Sin evidencia funcional registrada. Exigir: Diagnósticos previos conservados; selección de lotes por vencimiento y cantidades reconciliadas; recepción parcial existente no se reimplementa; precios por convenio resueltos en servidor. | Pendiente de revisión. |
+| [ ] | T8-7 | pendiente | Preparación local en T7-1. Exigir: proveedor elegido, sandbox/certificación, tipos 39/33, rechazo, timeout, duplicados y reconciliación verificados con proveedor real. | D-05 pendiente; emisión deshabilitada en fase 7. |
 
 ## Defectos y bloqueos
 

@@ -4,8 +4,10 @@ package config
 
 import (
 	"fmt"
+	"net/netip"
 	"net/url"
 	"os"
+	"strings"
 
 	"github.com/vetdata/api/internal/domain"
 )
@@ -23,6 +25,7 @@ type Config struct {
 	OutboxKey      string
 	SMTPAllowPlain bool
 	StatusRules    string
+	TrustedProxies []netip.Prefix
 }
 
 // Load reads configuration from the environment.
@@ -39,6 +42,23 @@ func Load() (Config, error) {
 		OutboxKey:      os.Getenv("OUTBOX_KEY"),
 		SMTPAllowPlain: os.Getenv("SMTP_ALLOW_PLAIN") == "true" && os.Getenv("APP_ENV") != "production",
 		StatusRules:    os.Getenv("PATIENT_STATUS_RULES"),
+	}
+	for key, dest := range map[string]*string{"DATABASE_URL": &cfg.DatabaseURL, "SMTP_PASSWORD": &cfg.SMTPPassword, "OUTBOX_KEY": &cfg.OutboxKey} {
+		value, err := Secret(key)
+		if err != nil {
+			return Config{}, err
+		}
+		*dest = value
+	}
+	for _, raw := range strings.Split(os.Getenv("TRUSTED_PROXY_CIDRS"), ",") {
+		if strings.TrimSpace(raw) == "" {
+			continue
+		}
+		prefix, err := netip.ParsePrefix(strings.TrimSpace(raw))
+		if err != nil || prefix.Bits() == 0 {
+			return Config{}, fmt.Errorf("invalid TRUSTED_PROXY_CIDRS")
+		}
+		cfg.TrustedProxies = append(cfg.TrustedProxies, prefix)
 	}
 	if _, err := domain.ParsePatientStatusRules(cfg.StatusRules); err != nil {
 		return Config{}, err

@@ -12,6 +12,7 @@ export type Permission =
   | "farmacia.dispensar"
   | "farmacia.inventario"
   | "red.solicitar"
+  | "red.suspender"
   | "red.aprobar"
   | "red.revocar"
   | "tienda.vender"
@@ -26,7 +27,7 @@ export type Permission =
   | "reportes.financiero"
   | "usuarios.administrar";
 
-/** Catálogo de permisos (fijo en el producto; no depende de la clínica). */
+/** Catálogo de la UI; red.aprobar/red.revocar son exclusivos de la demo mock. */
 export const PERMISSIONS: { id: Permission; area: string; label: string; description: string }[] = [
   { id: "ficha.ver", area: "Clínica", label: "Ver ficha clínica", description: "Consultas, exámenes y recetas del paciente." },
   { id: "ficha.editar", area: "Clínica", label: "Editar ficha clínica", description: "Registrar consultas, diagnósticos y tratamientos." },
@@ -36,6 +37,7 @@ export const PERMISSIONS: { id: Permission; area: string; label: string; descrip
   { id: "farmacia.dispensar", area: "Farmacia", label: "Dispensar", description: "Entregar medicamentos derivados a farmacia interna." },
   { id: "farmacia.inventario", area: "Farmacia", label: "Gestionar inventario", description: "Ajustes de stock y órdenes de compra." },
   { id: "red.solicitar", area: "Red", label: "Solicitar acceso", description: "Pedir fichas a otras clínicas de la red." },
+  { id: "red.suspender", area: "Red", label: "Suspender accesos", description: "Freno de emergencia con causa para accesos a fichas de la clínica." },
   { id: "red.aprobar", area: "Red", label: "Aprobar solicitudes", description: "Compartir fichas propias con otras clínicas." },
   { id: "red.revocar", area: "Red", label: "Revocar accesos", description: "Quitar accesos otorgados a otras clínicas." },
   { id: "tienda.vender", area: "Tienda", label: "Vender en tienda", description: "Usar el punto de venta y emitir boletas." },

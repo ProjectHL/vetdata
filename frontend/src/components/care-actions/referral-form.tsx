@@ -19,6 +19,7 @@ import { INTERNAL_PHARMACY, type Referral, type ReferralItem } from "@/domain/re
 import { useToday } from "@/lib/format";
 import { useClinics, useCurrentClinic } from "@/lib/server-state";
 import { useDoctors, useStore } from "@/lib/store";
+import { dataSource } from "@/services";
 import { Field, SuccessPanel } from "./field";
 
 const FREQUENCIES = ["Cada 8 h", "Cada 12 h", "Cada 24 h", "Cada 48 h", "Semanal", "Mensual", "Dosis única"];
@@ -54,6 +55,13 @@ export function ReferralForm({ patient, onDone }: { patient: Patient; onDone: ()
   const [created, setCreated] = useState<Referral | null>(null);
   // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
   const today = useToday();
+
+  if (dataSource === "http") {
+    return <div className="flex flex-col gap-4 text-sm">
+      <p>La derivación de medicamentos está pendiente de conectar con la API. No se creó ninguna ficha.</p>
+      <Button variant="outline" onClick={onDone}>Volver</Button>
+    </div>;
+  }
 
   const update = (key: number, patch: Partial<Row>) =>
     setRows((prev) => prev.map((r) => (r.key === key ? { ...r, ...patch } : r)));

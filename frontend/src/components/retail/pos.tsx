@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { Minus, PawPrint, Plus, Printer, Search, ShoppingCart, Sparkles, Trash2, Truck, UserRound, X } from "lucide-react";
 import { Field } from "@/components/care-actions/field";
@@ -30,6 +30,7 @@ import { type Owner, ownerName } from "@/domain/owners";
 import { CATEGORIES, COURIERS, PAYMENT_METHODS, type PaymentMethod, type Product, type Sale, deliveryFee, ivaIncluded } from "@/domain/retail";
 import { formatCLP, formatRut, normalizeRut } from "@/lib/format";
 import { useRetail } from "@/lib/retail-store";
+import { dataSource } from "@/services";
 import { useOwners, usePatients } from "@/lib/server-state";
 import { cn } from "@/lib/utils";
 import { Receipt } from "./receipt";
@@ -51,6 +52,9 @@ export function PointOfSale() {
   const [delivery, setDelivery] = useState(false);
   const [courier, setCourier] = useState(COURIERS[0]);
   const [sale, setSale] = useState<Sale | null>(null);
+  const [charging, setCharging] = useState(false);
+  const [chargeError, setChargeError] = useState("");
+  const pendingCharge = useRef<{ fingerprint: string; key: string } | null>(null);
 
   const productOf = (id: string) => products.find((p) => p.id === id)!;
   const q = query.trim().toLowerCase();
@@ -73,7 +77,8 @@ export function PointOfSale() {
     );
 
   const subtotal = cart.reduce((s, l) => s + l.qty * productOf(l.productId).price, 0);
-  const fee = delivery && customer ? deliveryFee(customer.sector) : 0;
+  // La API aplica tarifa plana de $3.990 para todo despacho; la demo conserva su regla histórica.
+  const fee = delivery && customer ? (dataSource === "http" ? 3990 : deliveryFee(customer.sector)) : 0;
   const total = subtotal + fee;
 
   // Sugerencias según las especies de las mascotas del cliente.
@@ -287,22 +292,36 @@ export function PointOfSale() {
           </dl>
 
           <Guard permission="tienda.vender">
+            {chargeError && <p role="alert" className="text-sm text-destructive">{chargeError}</p>}
             <Button
               size="lg"
-              disabled={cart.length === 0}
-              onClick={() => {
-                setSale(
-                  checkout({
-                    items: cart.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: productOf(l.productId).price })),
-                    ownerRut: customer?.rut,
-                    payment,
-                    delivery: delivery && customer ? { courier } : undefined,
-                  })
-                );
-                reset();
+              disabled={cart.length === 0 || charging}
+              onClick={async () => {
+                setCharging(true);
+                setChargeError("");
+                const input = {
+                  items: cart.map((l) => ({ productId: l.productId, qty: l.qty, unitPrice: productOf(l.productId).price })),
+                  ownerRut: customer?.rut,
+                  payment,
+                  delivery: delivery && customer ? { courier } : undefined,
+                };
+                const fingerprint = JSON.stringify(input);
+                if (dataSource === "http" && pendingCharge.current?.fingerprint !== fingerprint) {
+                  pendingCharge.current = { fingerprint, key: crypto.randomUUID() };
+                }
+                try {
+                  const confirmed = await checkout({ ...input, idempotencyKey: pendingCharge.current?.key });
+                  pendingCharge.current = null;
+                  setSale(confirmed);
+                  reset();
+                } catch (cause) {
+                  setChargeError(dataSource === "http" ? "No se pudo confirmar el cobro. Revisa el historial de ventas antes de reintentar; el mismo intento conservará su clave." : cause instanceof Error ? cause.message : "No se pudo registrar la venta.");
+                } finally {
+                  setCharging(false);
+                }
               }}
             >
-              Cobrar {formatCLP(total)}
+              {charging ? "Registrando…" : `Cobrar ${formatCLP(total)}`}
             </Button>
           </Guard>
         </CardContent>

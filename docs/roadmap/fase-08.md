@@ -22,6 +22,7 @@ Ejecutar primero contratos y migraciones del paquete, luego reglas/servicios/han
 | T8-4 | p-09 | pendiente | Proxy NVR/ONVIF/RTSP, URLs de corta duración, auditoría previa y privacidad; audio desactivado. | Enlace vencido, origen directo inaccesible, box privado y permiso insuficiente; dispositivos reales verificados. |
 | T8-5 | p-13 | pendiente | Receta avanzada y controlados con proveedor/validación correspondiente; vincular prescripción y derivación. | Firma y vigencia verificables; no habilitar sin validación externa necesaria. |
 | T8-6 | p-16, p-22, p-24 | pendiente | Catálogo diagnóstico seleccionado, equivalencias con texto existente, FEFO, extensiones de compras y listas de precios por convenio. | Diagnósticos previos conservados; selección de lotes por vencimiento y cantidades reconciliadas; recepción parcial existente no se reimplementa; precios de convenio resueltos en servidor. |
+| T8-7 | p-12, D-05 | pendiente | Elegir proveedor DTE, implementar adaptador real para tipos 39/33 sobre el contrato/migración preparados en T7-1, certificar y habilitar por clínica. | Sandbox y certificación del proveedor aprobados; rechazo, timeout, callback duplicado/fuera de orden y reconciliación no duplican documentos. |
 
 ## Contratos e interfaces
 
@@ -48,6 +49,6 @@ Cerrar cada T8 por separado con proveedor y pruebas reales; la fase completa req
 
 ## Dependencias externas y decisiones de implementación
 
-D-08 a D-12: selección, contratos, credenciales, dispositivos o licencias por paquete. Registrar responsable y evidencia sin inventar disponibilidad.
+D-05 y D-08 a D-12: selección, contratos, credenciales, dispositivos o licencias por paquete. D-05 se trasladó desde fase 7 por decisión del responsable del proyecto del 2026-10-12. Registrar responsable y evidencia sin inventar disponibilidad.
 
 Los identificadores D se resuelven en el registro del [roadmap](README.md#decisiones-y-dependencias-diferidas). Una tarea pasa a bloqueada solo cuando su ejecución alcanza una dependencia ausente; las restantes pueden avanzar.

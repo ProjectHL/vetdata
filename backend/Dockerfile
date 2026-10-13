@@ -8,6 +8,7 @@ RUN go mod download
 COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/api ./cmd/api
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/setup ./cmd/setup
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /out/ops ./cmd/ops
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates tzdata wget
@@ -15,6 +16,7 @@ RUN adduser -D -u 10001 app
 WORKDIR /app
 COPY --from=builder /out/api /usr/local/bin/api
 COPY --from=builder /out/setup /usr/local/bin/setup
+COPY --from=builder /out/ops /usr/local/bin/ops
 USER app
 EXPOSE 4000
 ENTRYPOINT ["/usr/local/bin/api"]

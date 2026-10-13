@@ -16,6 +16,7 @@ import {
   accessLevel,
 } from "@/domain/sharing";
 import type { TaskMeta } from "@/domain/tasks";
+import type { MedicationReceiptLine } from "@/services/contracts";
 import { seedAppointments } from "@/mocks/appointments";
 import { doctors as mockDoctors, rooms as mockRooms } from "@/mocks/clinic";
 import { medications as mockMedications } from "@/mocks/medications";
@@ -32,8 +33,9 @@ import {
   seedUsers,
 } from "@/mocks/settings";
 import { seedGrants, seedRequests } from "@/mocks/sharing";
-import { ensureServerCatalogs, publish, read, readScalar } from "@/lib/server-state";
+import { ensureServerCatalogs, publish, read, readScalar, resetServerCatalogs } from "@/lib/server-state";
 import { dataSource, newIdempotencyKey, runInBackground, services } from "@/services";
+import { ApiError } from "@/services/http/client";
 import { TODAY, addDays, realToday } from "@/lib/format";
 
 /**
@@ -70,12 +72,12 @@ type Store = {
   purchaseOrders: PurchaseOrder[];
   /** Entrega una derivación a farmacia interna: salida de stock por cada ítem. */
   dispenseReferral: (id: string) => void;
-  adjustStock: (medicationId: string, qty: number, reason: MovementReason) => void;
+  adjustStock: (medicationId: string, qty: number, reason: MovementReason, lotId?: string) => Promise<void>;
   /** Crea una orden de compra en borrador con costo estimado. */
   createPurchaseOrder: (supplierId: string, items: { medicationId: string; qty: number }[]) => PurchaseOrder;
   sendPurchaseOrder: (id: string) => void;
   /** Recibe la orden: entrada de stock por cada ítem. */
-  receivePurchaseOrder: (id: string) => void;
+  receivePurchaseOrder: (id: string, items?: MedicationReceiptLine[]) => Promise<void>;
 
   // Análisis
   reminders: string[];
@@ -96,7 +98,7 @@ type Store = {
   rolePermissions: Record<Role, Permission[]>;
   togglePermission: (role: Role, permission: Permission) => void;
   clinicProfile: ClinicProfile;
-  setClinicProfile: (p: ClinicProfile) => void;
+  setClinicProfile: (p: ClinicProfile) => Promise<void>;
   sharingPolicy: SharingPolicy;
   setSharingPolicy: (p: SharingPolicy) => void;
 
@@ -135,31 +137,29 @@ function stampToday() {
 
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
-  const [appointments, setAppointments] = useState(seedAppointments); // http: se hidrata con services.appointments.list()
-  const [invoices, setInvoices] = useState(seedInvoices); // http: se hidrata con services.invoices.list()
-  const [referrals, setReferrals] = useState(seedReferrals); // http: se hidrata con services.referrals.list()
-  const [requests, setRequests] = useState(seedRequests); // http: se hidrata con services.sharing.listRequests()
-  const [grants, setGrants] = useState(seedGrants); // http: se hidrata con services.sharing.listGrants()
+  const [appointments, setAppointments] = useState(dataSource === "http" ? [] : seedAppointments);
+  const [invoices, setInvoices] = useState(dataSource === "http" ? [] : seedInvoices);
+  const [referrals, setReferrals] = useState(dataSource === "http" ? [] : seedReferrals);
+  const [requests, setRequests] = useState(dataSource === "http" ? [] : seedRequests);
+  const [grants, setGrants] = useState(dataSource === "http" ? [] : seedGrants);
   const [rooms, setRooms] = useState(read("rooms", mockRooms)); // http: se hidrata con services.clinic.listRooms()
   const [medications, setMedications] = useState(read("medications", mockMedications)); // http: se hidrata con services.pharmacy.listMedications()
-  const [movements, setMovements] = useState(seedMovements); // http: se hidrata con services.pharmacy.listMovements()
-  const [purchaseOrders, setPurchaseOrders] = useState(seedPurchaseOrders); // http: se hidrata con services.pharmacy.listPurchaseOrders()
+  const [movements, setMovements] = useState(dataSource === "http" ? [] : seedMovements);
+  const [purchaseOrders, setPurchaseOrders] = useState(dataSource === "http" ? [] : seedPurchaseOrders);
   // Sin endpoint en el backend (NotImplemented: GET /api/v1/reminders): se conserva el estado local.
   const [reminders, setReminders] = useState<string[]>([]);
   const [taskMeta, setTaskMeta] = useState<Record<string, TaskMeta>>({}); // http: se hidrata con services.tasks.listMeta()
   const [role, setRole] = useState<Role>("Veterinario"); // Mock: "Ver como". En http se inicializa con el rol del membership vigente (GET /me).
-  // T5-5: usuario de la sesión en modo http (GET /me → user). Nulo hasta
-  // resolver: `currentUser` usa la semilla como fallback (patrón T5-2) y el
-  // `loading`/`error` de la carga inicial ya cubre la sesión.
+  // T5-5: usuario de la sesión en modo http (GET /me). La UI espera la carga.
   const [sessionUser, setSessionUser] = useState<User | null>(null);
   // El rol inicial de la sesión se aplica una sola vez: un `retry` posterior
   // no pisa un cambio manual de "Ver como".
   const sessionApplied = useRef(false);
-  const [users, setUsers] = useState(seedUsers); // http: se hidrata con services.settings.listUsers()
-  const [rolePermissions, setRolePermissions] = useState(defaultRolePermissions); // http: se hidrata con services.settings.getRolePermissions()
-  const [clinicProfile, setClinicProfile] = useState(seedClinicProfile); // http: se hidrata con services.settings.getClinicProfile()
-  // Sin endpoint en el backend (NotImplemented: GET/PUT /api/v1/settings/sharing-policy): se conserva la semilla mock.
-  const [sharingPolicy, setSharingPolicy] = useState(seedSharingPolicy);
+  const [users, setUsers] = useState(dataSource === "http" ? [] : seedUsers);
+  const [rolePermissions, setRolePermissions] = useState(dataSource === "http" ? { Admin: [], Veterinario: [], Recepción: [], Farmacia: [] } : defaultRolePermissions);
+  const [clinicProfile, setClinicProfile] = useState(dataSource === "http" ? { legalName: "", rut: "", address: "", sector: "", phone: "", email: "", hours: "", boxes: 0 } : seedClinicProfile);
+  // Sin endpoint en el backend: en HTTP se usa una política local conservadora.
+  const [sharingPolicy, setSharingPolicy] = useState(dataSource === "http" ? { defaultScope: "Resumen clínico" as const, defaultDuration: 90 as const, requireConsent: true, notifyRequests: false } : seedSharingPolicy);
 
   // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
   const [loading, setLoading] = useState(dataSource === "http");
@@ -169,25 +169,29 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     if (dataSource !== "http") return;
     try {
+      resetServerCatalogs();
+      const [sessionData, rolePermissionsData] = await Promise.all([
+        services.settings.getCurrentUser(),
+        services.settings.getRolePermissions(),
+      ]);
+      const permitted = (permission: Permission) => rolePermissionsData[sessionData.role]?.includes(permission) ?? false;
       const core = Promise.all([
-        services.appointments.list(),
-        services.invoices.list(),
-        services.referrals.list(),
+        permitted("agenda.gestionar") ? services.appointments.list() : Promise.resolve([]),
+        permitted("facturas.emitir") ? services.invoices.list() : Promise.resolve([]),
+        permitted("farmacia.dispensar") ? services.referrals.list() : Promise.resolve([]),
         services.sharing.listRequests(),
         services.sharing.listGrants(),
         services.clinic.listRooms(),
-        services.pharmacy.listMedications(),
-        services.pharmacy.listMovements(),
-        services.pharmacy.listPurchaseOrders(),
+        permitted("farmacia.inventario") ? services.pharmacy.listMedications() : Promise.resolve([]),
+        permitted("farmacia.inventario") ? services.pharmacy.listMovements() : Promise.resolve([]),
+        permitted("farmacia.inventario") ? services.pharmacy.listPurchaseOrders() : Promise.resolve([]),
         services.tasks.listMeta(),
-        services.settings.getCurrentUser(),
-        services.settings.listUsers(),
-        services.settings.getRolePermissions(),
+        permitted("usuarios.administrar") ? services.settings.listUsers() : Promise.resolve([]),
         services.settings.getClinicProfile(),
       ]);
       // Catálogos sin store dueño + series de analytics: publican en el
       // registro de lib sin romper esta carga (nunca lanza; ver server-state).
-      const catalogs = ensureServerCatalogs();
+      const catalogs = ensureServerCatalogs(permitted);
       const [
         appointmentsData,
         invoicesData,
@@ -199,9 +203,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         movementsData,
         purchaseOrdersData,
         taskMetaData,
-        sessionData,
         usersData,
-        rolePermissionsData,
         clinicProfileData,
       ] = await core;
       await catalogs;
@@ -223,7 +225,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         sessionApplied.current = true;
         setRole(sessionData.role);
       }
-      if (usersData.length > 0) setUsers(usersData);
+      setUsers(usersData);
       setRolePermissions(rolePermissionsData);
       setClinicProfile(clinicProfileData);
     } catch (e) {
@@ -257,11 +259,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   /**
    * Usuario actual: en http el de la sesión (GET /me → user); hasta que la
-   * sesión resuelve, la semilla del rol activo para no romper `currentUser!`
-   * (patrón T5-2). En mock siempre el demo de "Ver como".
+   * sesión resuelve, un objeto vacío evita exponer identidad demo.
+   * En mock se conserva "Ver como".
    */
   const seedCurrentUser = users.find((u) => u.id === demoUserByRole[role])!;
-  const currentUser = dataSource === "http" ? (sessionUser ?? seedCurrentUser) : seedCurrentUser;
+  const currentUser = dataSource === "http"
+    ? (sessionUser ?? { id: "", name: "", email: "", role, status: "Inactivo" as const, lastAccess: "" })
+    : seedCurrentUser;
 
   /** Registra movimientos y aplica el delta al stock. Devuelve los creados (para revertir en modo http). */
   const recordMovements = (list: Omit<StockMovement, "id" | "date" | "user">[]) => {
@@ -322,6 +326,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return created;
     },
     addInvoice: (i) => {
+      if (dataSource === "http") throw new Error("La emisión de facturas no está conectada a la API");
       const folio = Math.max(0, ...invoices.map((x) => x.folio)) + 1;
       const created = { ...i, id: newId("f"), folio };
       setInvoices((prev) => [...prev, created]);
@@ -343,6 +348,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       return created;
     },
     addReferral: (r) => {
+      if (dataSource === "http") throw new Error("La derivación de medicamentos no está conectada a la API");
       const created = { ...r, id: newId("r") };
       setReferrals((prev) => [...prev, created]);
       // T5-4: POST /api/v1/pharmacy/referrals aún NotImplemented (exige prescriptionId);
@@ -499,10 +505,40 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         )
       );
     },
-    adjustStock: (medicationId, qty, reason) => {
+    adjustStock: async (medicationId, qty, reason, lotId) => {
+      if (dataSource === "http") {
+        if (!lotId) throw new Error("Selecciona un lote para ajustar el stock.");
+        newIdempotencyKey();
+        try {
+          await services.pharmacy.adjustStock({ medicationId, lotId, qty, reason });
+        } catch (cause) {
+          if (cause instanceof ApiError && cause.status === 409) {
+            try {
+              const [freshMedications, freshMovements] = await Promise.all([
+                services.pharmacy.listMedications(), services.pharmacy.listMovements(),
+              ]);
+              publish("medications", freshMedications);
+              setMedications(freshMedications);
+              setMovements(freshMovements);
+            } catch (refreshError) {
+              console.error("[pharmacy] adjustment rejected, refresh failed", refreshError);
+            }
+          }
+          throw cause;
+        }
+        try {
+          const [freshMedications, freshMovements] = await Promise.all([
+            services.pharmacy.listMedications(), services.pharmacy.listMovements(),
+          ]);
+          publish("medications", freshMedications);
+          setMedications(freshMedications);
+          setMovements(freshMovements);
+        } catch (refreshError) {
+          console.error("[pharmacy] adjustment saved, refresh failed", refreshError);
+        }
+        return;
+      }
       recordMovements([{ medicationId, type: "Ajuste", reason, qty }]);
-      // T5-4: POST /api/v1/pharmacy/movements aún NotImplemented (exige lotId);
-      // se conserva el optimista local sin key ni reconcile.
       runInBackground(services.pharmacy.adjustStock({ medicationId, qty, reason }));
     },
     createPurchaseOrder: (supplierId, items) => {
@@ -513,7 +549,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         date: stampToday(),
         items: items.map((i) => ({
           ...i,
-          unitCost: Math.round((medications.find((m) => m.id === i.medicationId)?.price ?? 0) * COST_RATIO),
+          unitCost: medications.find((m) => m.id === i.medicationId)?.unitCost ?? Math.round((medications.find((m) => m.id === i.medicationId)?.price ?? 0) * COST_RATIO),
         })),
         status: "Borrador",
       };
@@ -552,7 +588,24 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         )
       );
     },
-    receivePurchaseOrder: (id) => {
+    receivePurchaseOrder: async (id, items) => {
+      if (dataSource === "http") {
+        if (!items?.length) throw new Error("Indica los lotes recibidos.");
+        newIdempotencyKey();
+        const saved = await services.pharmacy.receivePurchaseOrder(id, items);
+        setPurchaseOrders((prev) => prev.map((order) => order.id === saved.id ? saved : order));
+        try {
+          const [freshMedications, freshMovements] = await Promise.all([
+            services.pharmacy.listMedications(), services.pharmacy.listMovements(),
+          ]);
+          publish("medications", freshMedications);
+          setMedications(freshMedications);
+          setMovements(freshMovements);
+        } catch (refreshError) {
+          console.error("[pharmacy] receipt saved, refresh failed", refreshError);
+        }
+        return;
+      }
       const order = purchaseOrders.find((o) => o.id === id);
       if (!order || order.status !== "Enviada") return;
       recordMovements(
@@ -565,8 +618,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         }))
       );
       setPurchaseOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "Recibida", receivedAt: stampToday() } : o)));
-      // T5-4: POST /api/v1/pharmacy/purchase-orders/:id/receive aún NotImplemented
-      // (exige body items con lote/vencimiento); se conserva el optimista sin key ni reconcile.
       runInBackground(services.pharmacy.receivePurchaseOrder(id));
     },
 
@@ -688,23 +739,21 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       );
     },
     clinicProfile,
-    setClinicProfile: (p) => {
+    setClinicProfile: async (p) => {
       const prev = clinicProfile;
       setClinicProfile(p);
       if (dataSource !== "http") {
-        runInBackground(services.settings.updateClinicProfile(p));
+        await services.settings.updateClinicProfile(p);
         return;
       }
       newIdempotencyKey();
-      runInBackground(
-        services.settings.updateClinicProfile(p).then(
-          (saved) => setClinicProfile(saved),
-          () => {
-            setClinicProfile(prev);
-            setError("No se pudo guardar el perfil de la clínica. Se restauró el estado anterior.");
-          }
-        )
-      );
+      try {
+        const saved = await services.settings.updateClinicProfile(p);
+        setClinicProfile(saved);
+      } catch (cause) {
+        setClinicProfile(prev);
+        throw cause;
+      }
     },
     sharingPolicy,
     setSharingPolicy: (p) => {

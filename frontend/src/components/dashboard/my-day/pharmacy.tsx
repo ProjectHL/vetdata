@@ -12,6 +12,7 @@ import { expiringValue, pharmacyKpis } from "@/lib/metrics/pharmacy";
 import { retailKpis } from "@/lib/metrics/retail";
 import { useRetail } from "@/lib/retail-store";
 import { useStore } from "@/lib/store";
+import { dataSource } from "@/services";
 import { LinkTile, MyTasksCard } from "./shared";
 
 export function PharmacyDay() {
@@ -26,8 +27,8 @@ export function PharmacyDay() {
   const expiring = expiringValue(medications, today);
   const retail = retailKpis(sales, products, today);
   const incoming = [
-    ...purchaseOrders.filter((o) => o.status === "Enviada").map((o) => ({ id: o.id, label: `Farmacia · OC ${o.number}`, who: getSupplier(o.supplierId)?.name, receive: () => receivePurchaseOrder(o.id) })),
-    ...orders.filter((o) => o.status === "Enviada").map((o) => ({ id: o.id, label: `Tienda · OC ${o.number}`, who: retailSuppliers.find((s) => s.id === o.supplierId)?.name, receive: () => receiveOrder(o.id) })),
+    ...purchaseOrders.filter((o) => o.status === "Enviada" || o.status === "Parcialmente recibida").map((o) => ({ id: o.id, label: `Farmacia · OC ${o.number}`, who: getSupplier(o.supplierId)?.name, href: "/farmacia/proveedores", receive: () => receivePurchaseOrder(o.id) })),
+    ...orders.filter((o) => o.status === "Enviada").map((o) => ({ id: o.id, label: `Tienda · OC ${o.number}`, who: retailSuppliers.find((s) => s.id === o.supplierId)?.name, href: "/tienda/compras", receive: () => receiveOrder(o.id) })),
   ];
 
   return (
@@ -54,7 +55,7 @@ export function PharmacyDay() {
                   <p className="font-medium">{o.label}</p>
                   <p className="truncate text-xs text-muted-foreground">{o.who}</p>
                 </div>
-                <Button size="sm" variant="outline" onClick={o.receive}>Recibir</Button>
+                {dataSource === "mock" ? <Button size="sm" variant="outline" onClick={o.receive}>Recibir</Button> : <Button size="sm" variant="outline" asChild><Link href={o.href}>Abrir orden</Link></Button>}
               </div>
             ))}
           </CardContent>

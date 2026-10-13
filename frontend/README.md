@@ -1,6 +1,6 @@
 # VetData web — frontend (Next.js 16 + pnpm)
 
-Prototipo funcional con datos simulados en memoria. Ver [../../ARCHITECTURE.md](../../ARCHITECTURE.md) para el mapa completo y [../../docs/backend/](../../docs/backend/) para los requerimientos de la API futura.
+Frontend con modo HTTP predeterminado y modo demo `mock` explícito. En HTTP las listas provienen de la API; las operaciones sin contrato compatible deben indicar que no están disponibles, sin crear documentos locales. Ver [../ARCHITECTURE.md](../ARCHITECTURE.md) y [la validación del roadmap](../docs/roadmap/validacion.md).
 
 ## Desarrollo
 
@@ -19,8 +19,8 @@ En `.env.local` (ver `.env.example`):
 
 | Variable | Default | Uso |
 |---|---|---|
-| `NEXT_PUBLIC_DATA_SOURCE` | `mock` | `mock` (semillas) o `http` (API real) |
-| `NEXT_PUBLIC_API_URL` | — | URL base API: `http://localhost:4000` en dev local, `http://api:4000` en compose |
+| `NEXT_PUBLIC_DATA_SOURCE` | `http` | API real; `mock` habilita la demo explícitamente |
+| `NEXT_PUBLIC_API_URL` | vacío | URL base API: vacío con proxy `/api/*` en Compose; `http://localhost:4000` solo si el navegador puede acceder directamente a la API en desarrollo |
 
 ## Docker
 

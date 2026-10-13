@@ -87,17 +87,21 @@ export type RespondAccessRequestInput = {
 };
 export type RespondAccessRequestResult = { request: AccessRequest; grant?: AccessGrant };
 
-export type AdjustStockInput = { medicationId: string; qty: number; reason: MovementReason };
+export type AdjustStockInput = { medicationId: string; lotId?: string; qty: number; reason: MovementReason };
 export type NewPurchaseOrder = { supplierId: string; items: { medicationId: string; qty: number }[] };
+export type MedicationReceiptLine = { medicationId: string; qty: number; lot: string; expiry: string };
 
 export type CheckoutInput = {
   items: SaleItem[];
   ownerRut?: string;
   payment: PaymentMethod;
   delivery?: { courier: string };
+  /** Misma intención de cobro conserva la key en un reintento tras una falla de red. */
+  idempotencyKey?: string;
 };
 export type CheckoutResult = { sale: Sale; shipment?: Shipment };
-export type RetailAdjustInput = { productId: string; location: Location; qty: number; reason: "Merma" | "Conteo" };
+export type RetailAdjustInput = { productId: string; location: Location; lotId?: string; qty: number; reason: "Merma" | "Conteo" };
+export type RetailReceiptLine = { productId: string; qty: number; lot: string; expiry?: string };
 export type NewRetailOrder = { supplierId: string; items: { productId: string; qty: number }[]; leadTimeDays: number };
 
 export type NewTicket = {
@@ -213,7 +217,7 @@ export interface PharmacyService {
   /** POST /api/v1/pharmacy/purchase-orders/:id/send */
   sendPurchaseOrder(id: string): Promise<PurchaseOrder>;
   /** POST /api/v1/pharmacy/purchase-orders/:id/receive — entrada de stock por cada ítem. */
-  receivePurchaseOrder(id: string): Promise<PurchaseOrder>;
+  receivePurchaseOrder(id: string, items?: MedicationReceiptLine[]): Promise<PurchaseOrder>;
 }
 
 export interface RetailService {
@@ -228,9 +232,9 @@ export interface RetailService {
   /** GET /api/v1/retail/movements */
   listMovements(): Promise<RetailMovement[]>;
   /** POST /api/v1/retail/transfers — bodega central → sala de ventas. */
-  transferToSala(productId: string, qty: number): Promise<RetailMovement>;
+  transferToSala(productId: string, qty: number): Promise<void>;
   /** POST /api/v1/retail/adjustments */
-  adjust(input: RetailAdjustInput): Promise<RetailMovement>;
+  adjust(input: RetailAdjustInput): Promise<void>;
   /** GET /api/v1/retail/orders */
   listOrders(): Promise<RetailOrder[]>;
   /** POST /api/v1/retail/orders */
@@ -238,7 +242,7 @@ export interface RetailService {
   /** POST /api/v1/retail/orders/:id/send */
   sendOrder(id: string): Promise<RetailOrder>;
   /** POST /api/v1/retail/orders/:id/receive — entrada a bodega central. */
-  receiveOrder(id: string): Promise<RetailOrder>;
+  receiveOrder(id: string, items?: RetailReceiptLine[]): Promise<RetailOrder>;
   /** GET /api/v1/retail/shipments */
   listShipments(): Promise<Shipment[]>;
   /** POST /api/v1/retail/shipments/:id/advance — siguiente estado de SHIPMENT_FLOW. */

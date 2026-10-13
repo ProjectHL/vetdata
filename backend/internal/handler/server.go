@@ -12,6 +12,7 @@ import (
 	"mime"
 	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 	"time"
 
@@ -23,10 +24,11 @@ import (
 )
 
 type Options struct {
-	Origin        string
-	SecureCookies bool
-	Mail          *notifications.Outbox
-	Now           func() time.Time
+	TrustedProxies []netip.Prefix
+	Origin         string
+	SecureCookies  bool
+	Mail           *notifications.Outbox
+	Now            func() time.Time
 	// StatusRules is the JSON PatientStatus policy (PATIENT_STATUS_RULES).
 	// Empty means the compiled default; invalid falls back to it with a warning.
 	StatusRules string
@@ -74,6 +76,7 @@ func NewWithOptions(pool *pgxpool.Pool, logger *slog.Logger, opt Options) http.H
 	s.authRoutes(mux)
 	s.settingsRoutes(mux)
 	s.clinicalRoutes(mux)
+	s.route(mux, "GET /api/v1/owners/{rut}/export", s.exportOwner)
 	s.sharingRoutes(mux)
 	s.tasksRoutes(mux)
 	s.operationsRoutes(mux)
@@ -140,6 +143,10 @@ func decode(w http.ResponseWriter, r *http.Request, v any) error {
 }
 func (s *Server) middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if ip := proxyClientIP(r, s.opt.TrustedProxies); ip != "" {
+			r = r.Clone(r.Context())
+			r.RemoteAddr = net.JoinHostPort(ip, "0")
+		}
 		w.Header().Set("X-Request-ID", domain.UUID())
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("Cache-Control", "no-store")

@@ -5,7 +5,7 @@
  */
 
 export type ProductCategory = "Alimentos" | "Snacks" | "Accesorios" | "Ropa" | "Juguetes" | "Higiene" | "Camas y transporte";
-export type TargetSpecies = "Perro" | "Gato" | "Ave" | "Conejo" | "Todas";
+export type TargetSpecies = "Perro" | "Gato" | "Ave" | "Conejo" | "Todas" | "Sin registrar";
 export type Location = "central" | "sala";
 
 export const LOCATIONS: Record<Location, string> = {
@@ -34,6 +34,8 @@ export type Product = {
   supplierId: string;
   /** Pasillo/estante en bodega central. */
   bin: string;
+  /** Lotes persistidos por ubicación; disponibles al ajustar inventario. */
+  lots?: { id: string; location: Location; lot: string; expiry: string | null; qty: number }[];
 };
 
 export type RetailSupplier = {
@@ -88,7 +90,7 @@ export type Shipment = {
 
 export const COURIERS = ["Reparto propio", "Pedidos Ya Envíos", "Chilexpress"];
 
-/** Despacho gratis en la comuna de la clínica; tarifa plana para el resto. */
+/** Regla histórica de despacho para el modo demo. La API cobra tarifa plana. */
 export function deliveryFee(sector: string) {
   return sector === "Providencia" ? 0 : 3990;
 }
@@ -109,14 +111,14 @@ export type RetailMovement = {
   user: string;
 };
 
-export type RetailOrderStatus = "Borrador" | "Enviada" | "Recibida";
+export type RetailOrderStatus = "Borrador" | "Enviada" | "Parcialmente recibida" | "Recibida";
 export type RetailOrder = {
   id: string;
   number: number;
   supplierId: string;
   date: string;
   expected: string;
-  items: { productId: string; qty: number; unitCost: number }[];
+  items: { productId: string; qty: number; unitCost: number; received?: number; pending?: number }[];
   status: RetailOrderStatus;
   receivedAt?: string;
 };
@@ -143,5 +145,6 @@ export function stockLevel(p: Product): StockLevel {
 
 export function margin(p: Product) {
   const net = p.price / (1 + IVA);
+  if (net <= 0) return 0;
   return Math.round(((net - p.cost) / net) * 100);
 }

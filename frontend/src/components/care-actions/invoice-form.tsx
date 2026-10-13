@@ -28,6 +28,7 @@ import { IVA_RATE } from "@/domain/services";
 import { formatCLP, formatDate, formatRut, useToday } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import { useBillableServices, useOwners } from "@/lib/server-state";
+import { dataSource } from "@/services";
 import { SuccessPanel } from "./field";
 
 type Row = InvoiceItem & { key: number };
@@ -46,12 +47,19 @@ export function InvoiceForm({ patient, onDone }: { patient: Patient; onDone: () 
   const billableServices = useBillableServices();
   const owner = owners.find((o) => o.rut === patient.ownerRut)!;
   const [rows, setRows] = useState<Row[]>([
-    { key: ++rowKey, description: billableServices[0].name, qty: 1, unitPrice: billableServices[0].price },
+    ...(billableServices[0] ? [{ key: ++rowKey, description: billableServices[0].name, qty: 1, unitPrice: billableServices[0].price }] : []),
   ]);
   const [picker, setPicker] = useState("");
   const [created, setCreated] = useState<Invoice | null>(null);
   // T5-5: fecha real tras el montaje en modo http (fija en mock/SSR, sin mismatch).
   const today = useToday();
+
+  if (dataSource === "http") {
+    return <div className="flex flex-col gap-4 text-sm">
+      <p>La emisión de facturas está pendiente de conectar con la API. No se creó ningún documento.</p>
+      <Button variant="outline" onClick={onDone}>Volver</Button>
+    </div>;
+  }
 
   const addItem = (value: string) => {
     const [kind, id] = value.split(":");

@@ -39,23 +39,30 @@ import { type AccessDuration, type AccessRequest, type AccessScope, DURATIONS, t
 import { formatDate, formatRut } from "@/lib/format";
 import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
+import { dataSource } from "@/services";
 
 const statusVariant: Record<RequestStatus, "default" | "secondary" | "destructive"> = {
   Pendiente: "secondary",
+  "Esperando dueño": "secondary",
   Aprobada: "default",
   Rechazada: "destructive",
+  Denegada: "destructive",
+  Expirada: "secondary",
+  Cancelada: "secondary",
 };
+
+const isPending = (status: RequestStatus) => status === "Pendiente" || status === "Esperando dueño";
 
 // Pendientes primero, luego por fecha descendente.
 const byPriority = (a: AccessRequest, b: AccessRequest) =>
-  Number(b.status === "Pendiente") - Number(a.status === "Pendiente") || b.date.localeCompare(a.date);
+  Number(isPending(b.status)) - Number(isPending(a.status)) || b.date.localeCompare(a.date);
 
 export function RequestTabs() {
   const { requests } = useStore();
   const currentClinic = useCurrentClinic();
   const received = requests.filter((r) => r.to === currentClinic).sort(byPriority);
   const sent = requests.filter((r) => r.from === currentClinic).sort(byPriority);
-  const pending = (list: AccessRequest[]) => list.filter((r) => r.status === "Pendiente").length;
+  const pending = (list: AccessRequest[]) => list.filter((r) => isPending(r.status)).length;
 
   return (
     <Tabs defaultValue="recibidas">
@@ -65,7 +72,9 @@ export function RequestTabs() {
       </TabsList>
       <TabsContent value="recibidas" className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
-          Otras clínicas piden acceso a pacientes de tu clínica. Aprueba solo con el consentimiento del dueño.
+          {dataSource === "http"
+            ? "Las solicitudes de otras clínicas las decide el dueño mediante su enlace de autorización."
+            : "Otras clínicas piden acceso a pacientes de tu clínica. Aprueba solo con el consentimiento del dueño."}
         </p>
         {received.map((r) => (
           <ReceivedCard key={r.id} request={r} />
@@ -83,34 +92,34 @@ function ReceivedCard({ request: r }: { request: AccessRequest }) {
   const patients = usePatients();
   const owners = useOwners();
   const [open, setOpen] = useState(false);
-  const p = patients.find((p) => p.id === r.patientId)!;
-  const owner = owners.find((o) => o.rut === r.ownerRut)!;
+  const p = patients.find((p) => p.id === r.patientId);
+  const owner = owners.find((o) => o.rut === (r.ownerRut ?? p?.ownerRut));
 
   return (
     <Card>
       <CardContent className="flex flex-col gap-4 lg:flex-row lg:items-center">
         <div className="flex flex-1 items-start gap-3">
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+          {p && <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <SpeciesIcon species={p.species} className="size-5" />
-          </span>
+          </span>}
           <div className="min-w-0 text-sm">
             <p>
-              <strong>{r.from}</strong> solicita acceso a <strong>{p.name}</strong>
+              <strong>{r.from}</strong> solicita acceso a <strong>{p?.name ?? "un paciente"}</strong>
             </p>
             <p className="text-muted-foreground">
-              Dueño: {ownerName(owner)} · RUT {formatRut(owner.rut)} · por {r.requestedBy} el {formatDate(r.date)}
+              {owner ? `Dueño: ${ownerName(owner)} · RUT ${formatRut(owner.rut)} · ` : ""}por {r.requestedBy} el {formatDate(r.date)}
             </p>
             <p className="mt-1 italic">“{r.reason}”</p>
             <div className="mt-2 flex flex-wrap gap-1.5">
               <Badge variant="outline">{r.scope}</Badge>
               <Badge variant="outline">{durationLabel(r.duration)}</Badge>
-              {!owner.shareConsent && (
+              {dataSource === "mock" && owner && !owner.shareConsent && (
                 <Badge variant="destructive"><AlertTriangle /> Dueño sin consentimiento registrado</Badge>
               )}
             </div>
           </div>
         </div>
-        {r.status === "Pendiente" ? (
+        {dataSource === "mock" && r.status === "Pendiente" ? (
           <div className="flex gap-2">
             <Guard permission="red.aprobar">
               <Button variant="outline" onClick={() => respondRequest(r.id, false)}><X /> Rechazar</Button>
@@ -125,7 +134,7 @@ function ReceivedCard({ request: r }: { request: AccessRequest }) {
           </Badge>
         )}
       </CardContent>
-      <ApproveDialog request={r} open={open} onOpenChange={setOpen} />
+      {dataSource === "mock" && <ApproveDialog request={r} open={open} onOpenChange={setOpen} />}
     </Card>
   );
 }
@@ -212,7 +221,7 @@ function SentTable({ requests }: { requests: AccessRequest[] }) {
     <Card>
       <CardContent className="flex flex-col gap-3">
         <p className="text-sm text-muted-foreground">
-          Solicitudes de tu clínica a otras clínicas. Cuando la aprueben, la mascota aparecerá en Compartidos conmigo.
+          Solicitudes de tu clínica a otras clínicas. Cuando el dueño autorice el acceso, la mascota aparecerá en Compartidos conmigo.
         </p>
         <Table>
           <TableHeader>
@@ -222,19 +231,19 @@ function SentTable({ requests }: { requests: AccessRequest[] }) {
               <TableHead>Solicitado</TableHead>
               <TableHead>Alcance · vigencia</TableHead>
               <TableHead>Estado</TableHead>
-              <TableHead className="text-right">
+              {dataSource === "mock" && <TableHead className="text-right">
                 <span className="inline-flex items-center gap-1"><FlaskConical className="size-3" /> Demo</span>
-              </TableHead>
+              </TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
             {requests.map((r) => {
-              const p = patients.find((p) => p.id === r.patientId)!;
+              const p = patients.find((p) => p.id === r.patientId);
               return (
                 <TableRow key={r.id}>
                   <TableCell>
-                    <span className="font-medium">{p.name}</span>
-                    <span className="block text-xs text-muted-foreground">Dueño RUT {formatRut(r.ownerRut)}</span>
+                  <span className="font-medium">{p?.name ?? "Paciente no disponible"}</span>
+                    {r.ownerRut && <span className="block text-xs text-muted-foreground">Dueño RUT {formatRut(r.ownerRut)}</span>}
                   </TableCell>
                   <TableCell>{r.to}</TableCell>
                   <TableCell className="tabular-nums">
@@ -243,14 +252,14 @@ function SentTable({ requests }: { requests: AccessRequest[] }) {
                   </TableCell>
                   <TableCell>{r.scope} · {durationLabel(r.duration)}</TableCell>
                   <TableCell><Badge variant={statusVariant[r.status]}>{r.status}</Badge></TableCell>
-                  <TableCell className="text-right">
+                  {dataSource === "mock" && <TableCell className="text-right">
                     {r.status === "Pendiente" && (
                       <span className="inline-flex gap-1">
                         <Button size="sm" variant="ghost" onClick={() => respondRequest(r.id, false)}>Simular rechazo</Button>
                         <Button size="sm" variant="outline" onClick={() => respondRequest(r.id, true)}>Simular aprobación</Button>
                       </span>
                     )}
-                  </TableCell>
+                  </TableCell>}
                 </TableRow>
               );
             })}

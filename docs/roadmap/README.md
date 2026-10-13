@@ -18,7 +18,7 @@ Secuencia: preparación → 1 → 2 → 3 → 4 → 5 → 6 → 7 → 8. Las fas
 | 4. Tienda, seguridad, soporte y analítica | [Fase 4](fase-04.md) | Diez dominios cubiertos por API y permisos; stock consistente; eventos inmutables; agregados y aislamiento revisados. |
 | 5. Integración frontend | [Fase 5](fase-05.md) | Modo HTTP persistente y flujos habilitados sin semillas ni simulación. Pantallas reflejan errores y alcance real. |
 | 6. Endurecimiento | [Fase 6](fase-06.md) | Controles críticos aprobados con evidencia reproducible. No sustituir esta suite por una compilación satisfactoria. |
-| 7. Chile y producción | [Fase 7](fase-07.md) | Certificación del proveedor, restauración demostrada, validación de políticas y acta de piloto. Credenciales ausentes o certificación pendiente mantienen el paquete bloqueado. |
+| 7. Chile y producción | [Fase 7](fase-07.md) | Restauración demostrada, validación de políticas y acta de piloto con DTE deshabilitado. La integración/certificación DTE pasa a T8-7 por decisión del 2026-10-12. |
 | 8. Integraciones posteriores al MVP | [Fase 8](fase-08.md) | Cerrar cada T8 por separado con proveedor y pruebas reales; la fase completa requiere todos sus paquetes validados. Diferir uno no equivale a darlo por terminado. |
 
 El alcance MVP definido en T0-7 sigue siendo fundaciones, identidad/red, agenda y pacientes de lectura. El roadmap completo es más amplio. En Fase 7, el piloto debe enumerar módulos habilitados; no equiparar desarrollo de un módulo con habilitación comercial.
@@ -69,7 +69,7 @@ Estas entradas son gates de ejecución; no cambian p-NN ni acreditan aprobación
 | D-02 | Bandeja/aceptación de derivaciones externas recibidas | Dev + responsable clínico | T3-5 | Actores, rutas, estados, acceso a receta y efecto de dispensación documentados. |
 | D-03 | Cálculo de PatientStatus y prioridad clínica | Responsable clínico + dev | T3-2 | Reglas deterministas y casos de prueba; p-22 exige cálculo servidor pero no fija fórmula. |
 | D-04 | Fórmulas de cobertura y cortes publicables | Producto + privacidad + dev | T4-4 | Denominadores, ventanas, sector y controles de inferencia compatibles con k≥5. |
-| D-05 | Proveedor DTE | Producto + dev | T7-1 | Selección, costos/capacidades, credenciales y certificación para 39/33; posteriores 61/52 registrados. |
+| D-05 | Proveedor DTE | Producto + dev | T8-7; diferido desde T7-1 el 2026-10-12 | Selección, costos/capacidades, credenciales y certificación para 39/33; posteriores 61/52 registrados. |
 | D-06 | VPS, dominio, operación y objetivos de recuperación | Operaciones + producto | T7-4 | Acceso, responsables, TLS, backups, RPO/RTO acordados y ensayo de restauración. |
 | D-07 | Retención clínica, anonimización y procedimiento de privacidad | Responsable de privacidad + producto | T7-2/T7-3 | Política aprobada y alcance explícito; p-14 cita plazo clínico como ejemplo. |
 | D-08 | WhatsApp/mensajería | Producto + dev | T8-1 | Proveedor, plantillas autorizadas, opt-out, costos y prueba de entrega. |

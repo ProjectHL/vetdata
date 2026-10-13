@@ -8,7 +8,12 @@ export const sharing: SharingService = {
   /** GET /api/v1/sharing/grants */
   listGrants: () => apiFetch<AccessGrant[]>("/api/v1/sharing/grants"),
   /** POST /api/v1/sharing/requests */
-  sendRequests: (input) => apiFetch<AccessRequest[]>("/api/v1/sharing/requests", { method: "POST", body: input }),
+  sendRequests: async (input) => {
+    const created = await apiFetch<{ id: string }[]>("/api/v1/sharing/requests", { method: "POST", body: input });
+    const ids = new Set(created.map((request) => request.id));
+    const requests = await apiFetch<AccessRequest[]>("/api/v1/sharing/requests");
+    return requests.filter((request) => ids.has(request.id));
+  },
   /** POST /api/v1/sharing/requests/:id/response — FALTANTE: el backend no expone respuesta de clínica (solo cancel/resend y decisión del dueño en /api/v1/owner/sharing/requests/:id/decision). */
   respond: async (): Promise<RespondAccessRequestResult> => {
     throw new NotImplementedError("POST /api/v1/sharing/requests/:id/response");

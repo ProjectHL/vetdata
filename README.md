@@ -30,7 +30,7 @@ VetData es un **dashboard de datos de mascotas compartido entre clínicas veteri
 docker compose -f infra/docker-compose.yml up --build
 ```
 
-- Web: http://localhost:3000 (redirige a /login, login simulado acepta cualquier correo)
+- Web: http://localhost:3000 (ingreso real contra la API; requiere una cuenta local creada con `setup --admin`)
 - API: http://localhost:4000/healthz
 - Postgres: localhost:5435
 
@@ -67,8 +67,8 @@ Los valores opcionales se pueden definir en `frontend/.env.local`. Consulte [fro
 
 | Variable | Valor por defecto | Uso |
 |---|---|---|
-| `NEXT_PUBLIC_DATA_SOURCE` | `mock` | Usa datos simulados. |
-| `NEXT_PUBLIC_API_URL` | Sin valor | URL base de la API cuando se conecta el backend. |
+| `NEXT_PUBLIC_DATA_SOURCE` | `http` | Usa la API. `mock` activa la demo de forma explícita. |
+| `NEXT_PUBLIC_API_URL` | `http://localhost:4000` en Docker | URL pública de la API para el navegador. |
 
 ## 🧭 Canales del dashboard
 

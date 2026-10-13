@@ -82,7 +82,7 @@
 
 ## Fase 7 — Chile + producción
 
-- [ ] T7-1 SII p-12: proveedor DTE, tipos 39/33 primero (61/52 después), folio/tipo/PDF/estado SII guardados, anulaciones
+- [ ] T7-1 SII p-12: preparación de contrato y persistencia DTE, sin emisión real. Proveedor, tipos 39/33, certificación y habilitación se difieren a T8-7 por decisión del 2026-10-12
 - [ ] T7-2 Privacidad p-14: ARCO manual (exportar/borrar dueño con auditoría), contrato encargado, ficha retenida ~10 años con contacto anonimizado, RUT normalizado global
 - [ ] T7-3 Retención p-07+p-19: auditoría general 5 años exportable; lecturas compartidas 2–3 años con duración exacta por validar; video 30 días default. Políticas separadas; sin purga automática de categorías pendientes de aprobación
 - [ ] T7-4 Infra prod: compose front+api+db, backups, TLS, logs, alertas, runbook piloto 1-2 clínicas
@@ -95,3 +95,4 @@
 - [ ] T8-4 Video p-09 (al final): proxy NVR/ONVIF-RTSP, URLs firmadas cortas, auditoría pre-firma, privacidad también en grabaciones, audio off default
 - [ ] T8-5 Receta avanzada p-13: firma electrónica, retenidos/psicotrópicos, vínculo Prescription↔Referral
 - [ ] T8-6 Diagnósticos p-22: VeNom/SNOMED-CT, diferencias + FEFO p-24 sobre la recepción parcial implementada en Fase 3, listas de precios por convenio p-16
+- [ ] T8-7 SII p-12 / D-05: seleccionar proveedor DTE, implementar/certificar tipos 39/33, guardar folio/PDF/estado y reconciliar/anular según capacidades autorizadas

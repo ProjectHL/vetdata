@@ -13,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import type { ClinicProfile } from "@/domain/settings";
 import { useCan, useStore } from "@/lib/store";
+import { dataSource } from "@/services";
+import { apiFetch } from "@/services/http/client";
 
 const NOTIFICATIONS = [
   { id: "requests", label: "Nuevas solicitudes de acceso de la red" },
@@ -48,9 +50,9 @@ export function UserProfile() {
         </div>
 
         <div key={currentUser.id} className="grid gap-4 sm:grid-cols-2">
-          <Field label="Nombre" htmlFor="pf-name"><Input id="pf-name" defaultValue={currentUser.name} /></Field>
-          <Field label="Email" htmlFor="pf-email"><Input id="pf-email" defaultValue={currentUser.email} /></Field>
-          {currentUser.role === "Veterinario" && (
+          <Field label="Nombre" htmlFor="pf-name"><Input id="pf-name" defaultValue={currentUser.name} readOnly={dataSource === "http"} /></Field>
+          <Field label="Email" htmlFor="pf-email"><Input id="pf-email" defaultValue={currentUser.email} readOnly={dataSource === "http"} /></Field>
+          {dataSource === "mock" && currentUser.role === "Veterinario" && (
             <>
               <Field label="Registro profesional (Colegio Médico Veterinario)" htmlFor="pf-reg">
                 <Input id="pf-reg" defaultValue={`CMV-${String(4120 + currentUser.id.length * 37)}`} />
@@ -62,7 +64,7 @@ export function UserProfile() {
           )}
         </div>
 
-        <div className="flex flex-col gap-2">
+        {dataSource === "mock" && <div className="flex flex-col gap-2">
           <p className="text-sm font-medium">Notificaciones</p>
           {NOTIFICATIONS.map((n) => (
             <div key={n.id} className="flex items-center gap-2">
@@ -74,7 +76,55 @@ export function UserProfile() {
               <Label htmlFor={`nt-${n.id}`} className="font-normal">{n.label}</Label>
             </div>
           ))}
-        </div>
+        </div>}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function TwoFactorCard() {
+  const { currentUser } = useStore();
+  const [codes, setCodes] = useState<string[] | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  if (dataSource !== "http" || currentUser.role !== "Admin") return null;
+
+  async function enroll() {
+    setBusy(true);
+    setError("");
+    try {
+      const result = await apiFetch<{ enabled: boolean; recoveryCodes: string[] }>("/api/v1/auth/mfa/enroll", { method: "POST" });
+      if (!result.enabled || result.recoveryCodes.length === 0) throw new Error("La API no entregó códigos de recuperación");
+      setCodes(result.recoveryCodes);
+    } catch {
+      setError("No se pudo activar 2FA. Reintenta con la sesión activa.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Verificación en dos pasos</CardTitle>
+        <CardDescription>
+          Para Admin, el próximo ingreso requerirá uno de estos códigos de un solo uso. Activar nuevamente reemplaza los códigos anteriores.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
+        {error && <p role="alert" className="text-sm text-destructive">{error}</p>}
+        {codes && (
+          <div className="rounded-md border p-4">
+            <p className="mb-3 text-sm font-medium">Guarda estos códigos ahora. No volverán a mostrarse.</p>
+            <ul className="grid gap-2 font-mono text-sm sm:grid-cols-2">
+              {codes.map((code) => <li key={code}>{code}</li>)}
+            </ul>
+          </div>
+        )}
+        <Button type="button" disabled={busy} onClick={() => void enroll()} className="self-start">
+          {busy ? "Activando…" : "Activar 2FA y generar códigos"}
+        </Button>
       </CardContent>
     </Card>
   );
@@ -96,6 +146,22 @@ export function ClinicProfileCard() {
   const editable = can("usuarios.administrar");
   const [draft, setDraft] = useState(clinicProfile);
   const [saved, setSaved] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+
+  async function save() {
+    setBusy(true);
+    setError("");
+    setSaved(false);
+    try {
+      await setClinicProfile(draft);
+      setSaved(true);
+    } catch {
+      setError("No se pudieron guardar los datos de la clínica.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <Card>
@@ -107,11 +173,11 @@ export function ClinicProfileCard() {
       </CardHeader>
       <CardContent className="flex flex-col gap-4">
         <div className="grid gap-4 sm:grid-cols-2">
-          {FIELDS.map((f) => (
+          {FIELDS.filter((f) => dataSource === "mock" || f.key !== "hours").map((f) => (
             <Field key={f.key} label={f.label} htmlFor={`cl-${f.key}`}>
               <Input
                 id={`cl-${f.key}`}
-                value={String(draft[f.key])}
+                value={String(draft[f.key] ?? "")}
                 disabled={!editable}
                 onChange={(e) => {
                   setDraft({ ...draft, [f.key]: e.target.value });
@@ -120,20 +186,16 @@ export function ClinicProfileCard() {
               />
             </Field>
           ))}
-          <Field label="N° de boxes" htmlFor="cl-boxes">
+          {dataSource === "mock" && <Field label="N° de boxes" htmlFor="cl-boxes">
             <Input id="cl-boxes" type="number" value={draft.boxes} disabled={!editable} onChange={(e) => setDraft({ ...draft, boxes: Number(e.target.value) || 0 })} />
-          </Field>
+          </Field>}
         </div>
         <div className="flex items-center justify-end gap-3">
+          {error && <span role="alert" className="text-sm text-destructive">{error}</span>}
           {saved && <span className="text-sm text-primary">Cambios guardados</span>}
           <Guard permission="usuarios.administrar">
-            <Button
-              onClick={() => {
-                setClinicProfile(draft);
-                setSaved(true);
-              }}
-            >
-              <Save /> Guardar
+            <Button type="button" disabled={busy} onClick={() => void save()}>
+              <Save /> {busy ? "Guardando…" : "Guardar"}
             </Button>
           </Guard>
         </div>

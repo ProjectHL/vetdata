@@ -29,7 +29,7 @@ func (s *Server) inventoryRoutes(m *http.ServeMux) {
 		})
 		s.route(m, "POST "+base+itemPath, func(w http.ResponseWriter, r *http.Request) error { return s.createItem(w, r, sc) })
 		s.route(m, "GET "+base+"/movements", func(w http.ResponseWriter, r *http.Request) error {
-			return s.scopedList(w, r, sc.Permission, `SELECT m.id,m.item_id AS "itemId",m.lot_id AS "lotId",m.qty,m.reason,m.reference_id AS "referenceId",m.actor_id AS "actorId",m.created_at AS at FROM inventory_movements m JOIN catalog_items c ON c.id=m.item_id WHERE m.clinic_id=$1 AND c.kind='`+sc.ItemKind+`' ORDER BY m.created_at DESC,m.id`)
+			return s.scopedList(w, r, sc.Permission, `SELECT m.id,m.item_id AS "itemId",m.lot_id AS "lotId",l.location,m.qty,m.reason,m.reference_id AS "referenceId",m.actor_id AS "actorId",m.created_at AS at FROM inventory_movements m JOIN catalog_items c ON c.id=m.item_id JOIN stock_lots l ON l.id=m.lot_id AND l.clinic_id=m.clinic_id WHERE m.clinic_id=$1 AND c.kind='`+sc.ItemKind+`' ORDER BY m.created_at DESC,m.id`)
 		})
 		s.route(m, "POST "+base+"/movements", func(w http.ResponseWriter, r *http.Request) error { return s.adjustInventory(w, r, sc) })
 		s.route(m, "GET "+base+"/purchase-orders", func(w http.ResponseWriter, r *http.Request) error {

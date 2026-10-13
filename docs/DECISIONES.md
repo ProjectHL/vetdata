@@ -16,7 +16,7 @@
 | p-07 | Auditoría de accesos de red | Recomendación aceptada + visible para dueño | Log de toda lectura `compartido` (usuario, clínica, mascota, alcance, hora). Visible para la clínica de origen Y para el dueño (quién vio la ficha de su mascota). Retención 2-3 años. | Fase 2 | decidido |
 | p-10 | Matriz de permisos | Recomendación aceptada + rediseño red: la clínica no aprueba | 4 roles fijos en MVP + guarda anti-autobloqueo (409). Cambio owner-driven: muere `red.aprobar` como aprobación de clínica; se reemplaza por `red.solicitar` (pedir, B) + `red.suspender` (freno de emergencia SOLO Admin origen, motivo obligatorio, auditado, notificado a dueño y B, reversible). Vet ya no aprueba. Roles custom en Fase 4. | Fase 2 | decidido |
 | p-11 | Pagos y cobranza | Recomendación aceptada | Registro manual MVP (abonos parciales, medio, saldo dueño). Pasarela/arqueo después. | Fase 3 | decidido |
-| p-12 | SII / DTE y folios | Proveedor externo | Bsale/Facto/Nubox u otro. VetData guarda folio, tipo (39/33 primero, 61/52 después), PDF y estado SII. `max+1` solo provisorio interno. | Fase 7 | decidido |
+| p-12 | SII / DTE y folios | Proveedor externo | Bsale/Facto/Nubox u otro. VetData guarda folio, tipo (39/33 primero, 61/52 después), PDF y estado SII. `max+1` solo provisorio interno. Contrato y persistencia preparados en Fase 7; selección, integración y certificación se retoman en T8-7. Hasta entonces no se emite DTE. | Fase 8 (preparación en Fase 7) | decidido |
 | p-16 | Precios, descuentos, listas | Recomendación aceptada | Precio siempre desde catálogo servidor (nunca desde cliente) + descuento % por línea en Fase 3. Listas por convenio después. | Fase 3 | decidido |
 | p-17 | `Medication.price` ¿neto o bruto? | Recomendación aceptada | Todo interno en neto. Tienda muestra bruto (neto×1.19) pero guarda neto. Unificar las 2 constantes IVA en una sola en backend. | Fase 1 | decidido |
 | p-13 | Recetas, derivación externa, firma | Recomendación aceptada | Usuario autenticado = firma simple MVP + verificar receta vigente al dispensar/facturar. Falta definir bandeja "derivaciones recibidas". Receta electrónica avanzada/psicotrópicos en Fase 8. | Fase 3 | decidido |
@@ -42,3 +42,7 @@
 ## Regla de cambio
 
 Cualquier cambio a esta tabla se hace editando este archivo + nueva entrada en Engram (topic `vetdata-decisiones-pnn`), indicando ID, valor anterior → nuevo y fase que lo pide.
+
+### Cambio pendiente de sincronización externa — 2026-10-12
+
+- **p-12:** fase objetivo anterior Fase 7 → nueva Fase 8 (T8-7), con preparación local en Fase 7. Solicitado por el responsable del proyecto durante el cierre de Fase 7 porque el proveedor DTE aún no está definido. Este repositorio registra el cambio; la entrada Engram requerida por la regla anterior sigue pendiente porque no hay integración Engram disponible en esta sesión. No declarar sincronización completa hasta registrarla.

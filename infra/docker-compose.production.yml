@@ -1,0 +1,138 @@
+name: vetdata-production
+x-api: &api
+  image: vetdata-api:${RELEASE:?Set RELEASE to the immutable release identifier}
+  build: ../backend
+  environment: &api-env
+    APP_ENV: production
+    DATABASE_URL_FILE: /run/secrets/database_url
+    SMTP_PASSWORD_FILE: /run/secrets/smtp_password
+    OUTBOX_KEY_FILE: /run/secrets/outbox_key
+    PUBLIC_WEB_URL: https://${DOMAIN:?Set DOMAIN}
+    SMTP_ADDR: ${SMTP_ADDR:?Set SMTP_ADDR}
+    SMTP_FROM: ${SMTP_FROM:?Set SMTP_FROM}
+    SMTP_USER: ${SMTP_USER:?Set SMTP_USER}
+    TRUSTED_PROXY_CIDRS: 172.30.77.2/32
+    PATIENT_STATUS_RULES: ${PATIENT_STATUS_RULES:-}
+  secrets: [database_url, smtp_password, outbox_key]
+  networks: [app, data]
+  depends_on:
+    db: {condition: service_healthy}
+services:
+  proxy:
+    image: caddy:2.10.2-alpine
+    environment:
+      DOMAIN: ${DOMAIN:?Set DOMAIN}
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./production/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      app: {ipv4_address: 172.30.77.2}
+    restart: unless-stopped
+    depends_on: [web, api]
+  web:
+    image: vetdata-web:${RELEASE:?Set RELEASE}
+    build:
+      context: ../frontend
+      args:
+        NEXT_PUBLIC_DATA_SOURCE: http
+        NEXT_PUBLIC_API_URL: ""
+    networks: [app]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "wget -q --spider http://127.0.0.1:3000/login"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  api:
+    <<: *api
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "wget -q --spider http://127.0.0.1:4000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+  setup:
+    <<: *api
+    profiles: [ops]
+    entrypoint: [/usr/local/bin/setup]
+    command: [--admin]
+    stdin_open: true
+    environment:
+      <<: *api-env
+      BOOTSTRAP_GROUP_ID: ${BOOTSTRAP_GROUP_ID:-}
+      BOOTSTRAP_GROUP_NAME: ${BOOTSTRAP_GROUP_NAME:-}
+      BOOTSTRAP_CLINIC_ID: ${BOOTSTRAP_CLINIC_ID:-}
+      BOOTSTRAP_CLINIC_NAME: ${BOOTSTRAP_CLINIC_NAME:-}
+      BOOTSTRAP_SECTOR: ${BOOTSTRAP_SECTOR:-}
+      BOOTSTRAP_ADDRESS: ${BOOTSTRAP_ADDRESS:-}
+      BOOTSTRAP_PHONE: ${BOOTSTRAP_PHONE:-}
+      BOOTSTRAP_LEGAL_NAME: ${BOOTSTRAP_LEGAL_NAME:-}
+      BOOTSTRAP_RUT: ${BOOTSTRAP_RUT:-}
+      BOOTSTRAP_NAME: ${BOOTSTRAP_NAME:-}
+      BOOTSTRAP_EMAIL: ${BOOTSTRAP_EMAIL:-}
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: vetdata
+      POSTGRES_DB: vetdata
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets: [db_password]
+    volumes: [postgres_data:/var/lib/postgresql/data]
+    networks: [data]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U vetdata -d vetdata"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+  backup:
+    image: postgres:17-alpine
+    profiles: [ops]
+    environment:
+      PGHOST: db
+      PGUSER: vetdata
+      PGDATABASE: vetdata
+      RELEASE: ${RELEASE:?Set RELEASE}
+    secrets: [db_password]
+    networks: [data]
+    volumes:
+      - ./production:/ops:ro
+      - ./backups:/backups
+    entrypoint: [sh, /ops/backup.sh]
+    depends_on:
+      db: {condition: service_healthy}
+  ops:
+    <<: *api
+    profiles: [ops]
+    entrypoint: [/usr/local/bin/ops]
+  check:
+    image: postgres:17-alpine
+    profiles: [ops]
+    environment:
+      PGHOST: db
+      PGUSER: vetdata
+      PGDATABASE: vetdata
+    secrets: [db_password]
+    networks: [app, data]
+    volumes:
+      - ./production:/ops:ro
+      - ./backups:/backups:ro
+    entrypoint: [sh, -c]
+    command: ['export PGPASSWORD="$$(cat /run/secrets/db_password)"; exec sh /ops/check.sh']
+networks:
+  app:
+    ipam:
+      config: [{subnet: 172.30.77.0/24, ip_range: 172.30.77.128/25}]
+  data:
+    internal: true
+volumes:
+  postgres_data:
+  caddy_data:
+  caddy_config:
+secrets:
+  db_password: {file: ./secrets/db_password}
+  database_url: {file: ./secrets/database_url}
+  smtp_password: {file: ./secrets/smtp_password}
+  outbox_key: {file: ./secrets/outbox_key}

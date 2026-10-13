@@ -32,14 +32,14 @@ export type Supplier = {
   paymentTerms: string;
 };
 
-export type PurchaseOrderStatus = "Borrador" | "Enviada" | "Recibida";
+export type PurchaseOrderStatus = "Borrador" | "Enviada" | "Parcialmente recibida" | "Recibida";
 
 export type PurchaseOrder = {
   id: string;
   number: number;
   supplierId: string;
   date: string;
-  items: { medicationId: string; qty: number; unitCost: number }[];
+  items: { medicationId: string; qty: number; unitCost: number; received?: number; pending?: number }[];
   status: PurchaseOrderStatus;
   receivedAt?: string;
 };

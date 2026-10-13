@@ -1,5 +1,6 @@
 import { AppSidebar } from "@/components/sidebar/app-sidebar";
 import { Topbar } from "@/components/topbar";
+import { ApiGate } from "@/components/dashboard/api-gate";
 import { RetailProvider } from "@/lib/retail-store";
 import { SecurityProvider } from "@/lib/security-store";
 import { StoreProvider } from "@/lib/store";
@@ -8,6 +9,7 @@ import { SupportProvider } from "@/lib/support-store";
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   return (
     <StoreProvider>
+      <ApiGate>
       <RetailProvider>
         <SupportProvider>
           <SecurityProvider>
@@ -23,6 +25,7 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           </SecurityProvider>
         </SupportProvider>
       </RetailProvider>
+      </ApiGate>
     </StoreProvider>
   );
 }

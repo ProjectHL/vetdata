@@ -16,6 +16,7 @@ import { useRetail } from "@/lib/retail-store";
 import { useSecurity } from "@/lib/security-store";
 import { useCan, useStore } from "@/lib/store";
 import { useSupport } from "@/lib/support-store";
+import { dataSource } from "@/services";
 
 export type TaskChannel = "Clínica" | "Red" | "Farmacia" | "Tienda" | "Seguridad" | "Soporte";
 export const TASK_CHANNELS: TaskChannel[] = ["Clínica", "Red", "Farmacia", "Tienda", "Seguridad", "Soporte"];
@@ -113,7 +114,7 @@ export function useTasks() {
   }
 
   // Red — solicitudes recibidas
-  for (const r of store.requests.filter((r) => r.to === getCurrentClinic() && r.status === "Pendiente")) {
+  for (const r of store.requests.filter((r) => dataSource === "mock" && r.to === getCurrentClinic() && r.status === "Pendiente")) {
     tasks.push({
       id: `solicitud:${r.id}`, channel: "Red", priority: daysUntil(r.date, today) <= -1 ? "Alta" : "Media", since: r.date, permission: "red.aprobar",
       title: `Responder solicitud de ${r.from}`,
@@ -144,7 +145,7 @@ export function useTasks() {
       href: "/farmacia/proveedores",
     });
   }
-  for (const o of store.purchaseOrders.filter((o) => o.status === "Enviada")) {
+  for (const o of store.purchaseOrders.filter((o) => o.status === "Enviada" || o.status === "Parcialmente recibida")) {
     tasks.push({
       id: `ocfar:${o.id}`, channel: "Farmacia", priority: "Baja", since: o.date, permission: "farmacia.inventario",
       title: `Recibir orden de compra N° ${o.number}`, detail: `${o.items.length} producto(s)`, href: "/farmacia/proveedores",

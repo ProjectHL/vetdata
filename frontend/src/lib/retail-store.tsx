@@ -57,14 +57,15 @@ type RetailStore = {
     ownerRut?: string;
     payment: PaymentMethod;
     delivery?: { courier: string };
-  }) => Sale;
+    idempotencyKey?: string;
+  }) => Promise<Sale>;
   /** Mueve unidades de bodega central a sala de ventas. */
   transferToSala: (productId: string, qty: number) => void;
-  adjust: (productId: string, location: Location, qty: number, reason: "Merma" | "Conteo") => void;
-  createOrder: (supplierId: string, items: { productId: string; qty: number }[], leadTimeDays: number) => RetailOrder;
-  sendOrder: (id: string) => void;
+  adjust: (productId: string, location: Location, qty: number, reason: "Merma" | "Conteo", lotId?: string) => Promise<void>;
+  createOrder: (supplierId: string, items: { productId: string; qty: number }[], leadTimeDays: number) => Promise<RetailOrder>;
+  sendOrder: (id: string) => Promise<void>;
   /** Recibe la orden: entrada a bodega central. */
-  receiveOrder: (id: string) => void;
+  receiveOrder: (id: string, items?: { productId: string; qty: number; lot: string; expiry?: string }[]) => Promise<void>;
   advanceShipment: (id: string) => void;
   // Hidratación desde el servidor (T5-2): en modo mock siempre loading=false y error=null.
   loading: boolean;
@@ -89,14 +90,14 @@ const addressOf = (rut: string) => {
 };
 
 export function RetailProvider({ children }: { children: React.ReactNode }) {
-  const { currentUser } = useStore();
-  const [products, setProducts] = useState(seedProducts); // http: se hidrata con services.retail.listProducts()
-  const [sales, setSales] = useState(seedSales); // http: se hidrata con services.retail.listSales()
-  const [movements, setMovements] = useState(seedRetailMovements); // http: se hidrata con services.retail.listMovements()
-  const [orders, setOrders] = useState(seedRetailOrders); // http: se hidrata con services.retail.listOrders()
-  const [shipments, setShipments] = useState(() => buildSeedShipments(seedSales, addressOf)); // http: se hidrata con services.retail.listShipments()
+  const { currentUser, rolePermissions } = useStore();
+  const [products, setProducts] = useState(dataSource === "http" ? [] : seedProducts);
+  const [sales, setSales] = useState(dataSource === "http" ? [] : seedSales);
+  const [movements, setMovements] = useState(dataSource === "http" ? [] : seedRetailMovements);
+  const [orders, setOrders] = useState(dataSource === "http" ? [] : seedRetailOrders);
+  const [shipments, setShipments] = useState(dataSource === "http" ? [] : buildSeedShipments(seedSales, addressOf));
   // Catálogo publicado al registro de lib (no se expone: la UI lo lee vía useRetailSuppliers de server-state).
-  const [suppliers, setSuppliers] = useState<RetailSupplier[]>(read("retailSuppliers", mockRetailSuppliers)); // http: se hidrata con services.retail.listSuppliers()
+  const [suppliers, setSuppliers] = useState<RetailSupplier[]>(dataSource === "http" ? [] : read("retailSuppliers", mockRetailSuppliers));
 
   // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
   const [loading, setLoading] = useState(dataSource === "http");
@@ -106,13 +107,15 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     if (dataSource !== "http") return;
     try {
+      const permitted = (permission: "tienda.vender" | "tienda.inventario" | "tienda.compras" | "reportes.financiero") =>
+        rolePermissions[currentUser.role]?.includes(permission) ?? false;
       const [productsData, salesData, movementsData, ordersData, shipmentsData, suppliersData] = await Promise.all([
-        services.retail.listProducts(),
-        services.retail.listSales(),
-        services.retail.listMovements(),
-        services.retail.listOrders(),
-        services.retail.listShipments(),
-        services.retail.listSuppliers(),
+        permitted("tienda.inventario") ? services.retail.listProducts() : Promise.resolve([]),
+        permitted("tienda.vender") || permitted("reportes.financiero") ? services.retail.listSales() : Promise.resolve([]),
+        permitted("tienda.inventario") ? services.retail.listMovements() : Promise.resolve([]),
+        permitted("tienda.compras") ? services.retail.listOrders() : Promise.resolve([]),
+        permitted("tienda.inventario") ? services.retail.listShipments() : Promise.resolve([]),
+        permitted("tienda.inventario") ? services.retail.listSuppliers() : Promise.resolve([]),
       ]);
       // Publica antes de los setState para que el re-render ya lea el registro fresco.
       publish("retailSuppliers", suppliersData);
@@ -127,7 +130,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser.role, rolePermissions]);
 
   useEffect(() => {
     // Hidratación inicial al montar: el fetch resuelve en continuaciones async, no es un render en cascada.
@@ -177,7 +180,22 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
     movements,
     orders,
     shipments,
-    checkout: ({ items, ownerRut, payment, delivery }) => {
+    checkout: async ({ items, ownerRut, payment, delivery, idempotencyKey }) => {
+      const input = { items, ownerRut, payment, delivery, idempotencyKey };
+      if (dataSource === "http") {
+        if (!idempotencyKey) newIdempotencyKey();
+        const { sale: savedSale, shipment: savedShipment } = await services.retail.checkout(input);
+        setSales((prev) => [...prev, savedSale]);
+        if (savedShipment) setShipments((prev) => [...prev, savedShipment]);
+        try {
+          const [freshProducts, freshMovements] = await Promise.all([services.retail.listProducts(), services.retail.listMovements()]);
+          setProducts(freshProducts);
+          setMovements(freshMovements);
+        } catch {
+          setError("Venta registrada. No se pudo actualizar el inventario; recarga la página.");
+        }
+        return savedSale;
+      }
       const owner = ownerRut ? getOwner(ownerRut) : undefined;
       const fee = delivery && owner ? deliveryFee(owner.sector) : 0;
       const sale: Sale = {
@@ -194,8 +212,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
         channel: "Mesón",
       };
       setSales((prev) => [...prev, sale]);
-      const createdMovements = record(items.map((i) => ({ productId: i.productId, type: "Salida", reason: "Venta", location: "sala", qty: -i.qty, ref: `Boleta ${sale.number}` })));
-      let shipmentId: string | null = null;
+      record(items.map((i) => ({ productId: i.productId, type: "Salida", reason: "Venta", location: "sala", qty: -i.qty, ref: `Boleta ${sale.number}` })));
       if (delivery && owner) {
         const shipment: Shipment = {
           id: newId("sh"),
@@ -207,83 +224,52 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
           scheduledFor: addDays(stampToday(), 1),
           status: "Por preparar",
         };
-        shipmentId = shipment.id;
         setShipments((prev) => [...prev, shipment]);
       }
-      const input = { items, ownerRut, payment, delivery };
-      if (dataSource !== "http") {
-        runInBackground(services.retail.checkout(input));
-        return sale;
-      }
-      // T5-4: UNA key por venta; se reconcilian venta y despacho canónicos, al fallar se revierte todo.
-      newIdempotencyKey();
-      const movementIds = new Set(createdMovements.map((m) => m.id));
-      runInBackground(
-        services.retail.checkout(input).then(
-          ({ sale: savedSale, shipment: savedShipment }) => {
-            setSales((prev) => prev.map((s) => (s.id === sale.id ? savedSale : s)));
-            setShipments((prev) => {
-              const withoutOptimistic = shipmentId ? prev.filter((sh) => sh.id !== shipmentId) : prev;
-              return savedShipment
-                ? [...withoutOptimistic.filter((sh) => sh.id !== savedShipment.id), savedShipment]
-                : withoutOptimistic;
-            });
-          },
-          () => {
-            setSales((prev) => prev.filter((s) => s.id !== sale.id));
-            setMovements((prev) => prev.filter((m) => !movementIds.has(m.id)));
-            setProducts((prev) =>
-              prev.map((p) => {
-                const back = createdMovements
-                  .filter((m) => m.productId === p.id)
-                  .reduce((sum, m) => sum + m.qty, 0);
-                if (!back) return p;
-                const stock = { ...p.stock };
-                stock.sala = Math.max(0, stock.sala - back);
-                return { ...p, stock };
-              })
-            );
-            if (shipmentId) setShipments((prev) => prev.filter((sh) => sh.id !== shipmentId));
-            setError("No se pudo registrar la venta. Se revirtieron los movimientos.");
-          }
-        )
-      );
+      runInBackground(services.retail.checkout(input));
       return sale;
     },
     transferToSala: (productId, qty) => {
-      const createdMovements = record([{ productId, type: "Transferencia", reason: "Reposición sala", location: "sala", from: "central", qty }]);
-      const movementId = createdMovements[0]?.id;
-      if (dataSource !== "http" || !movementId) {
-        runInBackground(services.retail.transferToSala(productId, qty));
+      if (dataSource === "http") {
+        newIdempotencyKey();
+        runInBackground(services.retail.transferToSala(productId, qty).then(async () => {
+          try {
+            const [freshProducts, freshMovements] = await Promise.all([services.retail.listProducts(), services.retail.listMovements()]);
+            setProducts(freshProducts);
+            setMovements(freshMovements);
+          } catch {
+            setError("Transferencia registrada. No se pudo actualizar el inventario; recarga la página.");
+          }
+        }, () => setError("No se pudo transferir el stock a sala.")));
         return;
       }
-      newIdempotencyKey();
-      runInBackground(
-        services.retail.transferToSala(productId, qty).then(
-          (saved) => setMovements((prev) => prev.map((m) => (m.id === movementId ? saved : m))),
-          () => {
-            setMovements((prev) => prev.filter((m) => m.id !== movementId));
-            setProducts((prev) =>
-              prev.map((p) => {
-                if (p.id !== productId) return p;
-                const stock = { ...p.stock };
-                stock.central += qty;
-                stock.sala = Math.max(0, stock.sala - qty);
-                return { ...p, stock };
-              })
-            );
-            setError("No se pudo transferir el stock a sala. Se restauró el estado anterior.");
-          }
-        )
-      );
+      const createdMovements = record([{ productId, type: "Transferencia", reason: "Reposición sala", location: "sala", from: "central", qty }]);
+      if (createdMovements.length) runInBackground(services.retail.transferToSala(productId, qty));
     },
-    adjust: (productId, location, qty, reason) => {
+    adjust: async (productId, location, qty, reason, lotId) => {
+      if (dataSource === "http") {
+        if (!lotId) throw new Error("Selecciona un lote para ajustar el stock.");
+        newIdempotencyKey();
+        await services.retail.adjust({ productId, location, lotId, qty, reason });
+        try {
+          const [freshProducts, freshMovements] = await Promise.all([services.retail.listProducts(), services.retail.listMovements()]);
+          setProducts(freshProducts);
+          setMovements(freshMovements);
+        } catch {
+          setError("Ajuste registrado. No se pudo actualizar el inventario; recarga la página.");
+        }
+        return;
+      }
       record([{ productId, type: "Ajuste", reason, location, qty }]);
-      // T5-4: POST /api/v1/retail/adjustments aún NotImplemented (exige lotId);
-      // se conserva el optimista local sin key ni reconcile.
-      runInBackground(services.retail.adjust({ productId, location, qty, reason }));
+      await services.retail.adjust({ productId, location, qty, reason });
     },
-    createOrder: (supplierId, items, leadTimeDays) => {
+    createOrder: async (supplierId, items, leadTimeDays) => {
+      if (dataSource === "http") {
+        newIdempotencyKey();
+        const saved = await services.retail.createOrder({ supplierId, items, leadTimeDays });
+        setOrders((prev) => [...prev, saved]);
+        return saved;
+      }
       const order: RetailOrder = {
         id: newId("ro"),
         number: Math.max(0, ...orders.map((o) => o.number)) + 1,
@@ -294,52 +280,54 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
         status: "Borrador",
       };
       setOrders((prev) => [...prev, order]);
-      if (dataSource !== "http") {
-        runInBackground(services.retail.createOrder({ supplierId, items, leadTimeDays }));
-        return order;
-      }
-      newIdempotencyKey();
-      runInBackground(
-        services.retail.createOrder({ supplierId, items, leadTimeDays }).then(
-          (saved) => setOrders((prev) => prev.map((o) => (o.id === order.id ? saved : o))),
-          () => {
-            setOrders((prev) => prev.filter((o) => o.id !== order.id));
-            setError("No se pudo crear la orden de compra. Se descartó el cambio local.");
-          }
-        )
-      );
+      runInBackground(services.retail.createOrder({ supplierId, items, leadTimeDays }));
       return order;
     },
-    sendOrder: (id) => {
+    sendOrder: async (id) => {
       const prev = orders.find((o) => o.id === id);
-      setOrders((prevList) => prevList.map((o) => (o.id === id && o.status === "Borrador" ? { ...o, status: "Enviada" } : o)));
-      if (dataSource !== "http" || !prev) {
-        runInBackground(services.retail.sendOrder(id));
+      if (dataSource === "http") {
+        if (!prev || prev.status !== "Borrador") return;
+        newIdempotencyKey();
+        const saved = await services.retail.sendOrder(id);
+        setOrders((prevList) => prevList.map((o) => o.id === id ? saved : o));
         return;
       }
-      newIdempotencyKey();
-      runInBackground(
-        services.retail.sendOrder(id).then(
-          (saved) => setOrders((prevList) => prevList.map((o) => (o.id === saved.id ? saved : o))),
-          () => {
-            setOrders((prevList) => prevList.map((o) => (o.id === id ? prev : o)));
-            setError("No se pudo enviar la orden de compra. Se restauró el estado anterior.");
-          }
-        )
-      );
+      setOrders((prevList) => prevList.map((o) => (o.id === id && o.status === "Borrador" ? { ...o, status: "Enviada" } : o)));
+      runInBackground(services.retail.sendOrder(id));
     },
-    receiveOrder: (id) => {
+    receiveOrder: async (id, items) => {
+      if (dataSource === "http") {
+        if (!items?.length) throw new Error("Indica los lotes recibidos.");
+        newIdempotencyKey();
+        const saved = await services.retail.receiveOrder(id, items);
+        setOrders((prev) => prev.map((order) => order.id === id ? saved : order));
+        try {
+          const [freshProducts, freshMovements] = await Promise.all([services.retail.listProducts(), services.retail.listMovements()]);
+          setProducts(freshProducts);
+          setMovements(freshMovements);
+        } catch {
+          setError("Recepción registrada. No se pudo actualizar el inventario; recarga la página.");
+        }
+        return;
+      }
       const order = orders.find((o) => o.id === id);
       if (!order || order.status !== "Enviada") return;
       record(order.items.map((i) => ({ productId: i.productId, type: "Entrada", reason: "Compra", location: "central", qty: i.qty, ref: `OC ${order.number}` })));
       setOrders((prev) => prev.map((o) => (o.id === id ? { ...o, status: "Recibida", receivedAt: stampToday() } : o)));
-      // T5-4: POST /api/v1/retail/purchase-orders/:id/receive aún NotImplemented
-      // (exige body items con lote/vencimiento); se conserva el optimista sin key ni reconcile.
-      runInBackground(services.retail.receiveOrder(id));
+      await services.retail.receiveOrder(id);
     },
     advanceShipment: (id) => {
       const prev = shipments.find((s) => s.id === id);
       const next = prev ? SHIPMENT_FLOW[SHIPMENT_FLOW.indexOf(prev.status) + 1] : undefined;
+      if (dataSource === "http") {
+        if (!prev || !next) return;
+        newIdempotencyKey();
+        runInBackground(services.retail.advanceShipment(id).then(
+          (saved) => setShipments((list) => list.map((shipment) => shipment.id === id ? saved : shipment)),
+          () => setError("No se pudo avanzar el despacho."),
+        ));
+        return;
+      }
       setShipments((prevList) =>
         prevList.map((s) => {
           if (s.id !== id) return s;
@@ -347,20 +335,7 @@ export function RetailProvider({ children }: { children: React.ReactNode }) {
           return nextStatus ? { ...s, status: nextStatus } : s;
         })
       );
-      if (dataSource !== "http" || !prev || !next) {
-        runInBackground(services.retail.advanceShipment(id));
-        return;
-      }
-      newIdempotencyKey();
-      runInBackground(
-        services.retail.advanceShipment(id).then(
-          (saved) => setShipments((prevList) => prevList.map((s) => (s.id === saved.id ? saved : s))),
-          () => {
-            setShipments((prevList) => prevList.map((s) => (s.id === id ? prev : s)));
-            setError("No se pudo avanzar el despacho. Se restauró el estado anterior.");
-          }
-        )
-      );
+      runInBackground(services.retail.advanceShipment(id));
     },
     loading,
     error,

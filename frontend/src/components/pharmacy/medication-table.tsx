@@ -26,6 +26,7 @@ import { Guard } from "@/components/settings/guard";
 import { Button } from "@/components/ui/button";
 import { EXPIRY_WARNING_DAYS, type Medication, type StockStatus, expiryStatus, stockStatus } from "@/domain/medications";
 import { useStore } from "@/lib/store";
+import { dataSource } from "@/services";
 import { AdjustStockDialog } from "./adjust-stock-dialog";
 import { formatDate, useToday } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -172,8 +173,8 @@ export function MedicationTable() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="tabular-nums">{formatDate(m.expiry)}</div>
-                      <div className="text-xs text-muted-foreground">Lote {m.lot}</div>
+                      <div className="tabular-nums">{m.expiry ? formatDate(m.expiry) : "Sin vencimiento registrado"}</div>
+                      {m.lot && <div className="text-xs text-muted-foreground">Lote {m.lot}</div>}
                       {expiry === "vencido" && <Badge variant="destructive" className="mt-1"><CalendarX /> Vencido</Badge>}
                       {expiry === "por vencer" && (
                         <Badge variant="outline" className="mt-1 border-orange-300 text-orange-700 dark:text-orange-300">
@@ -189,7 +190,7 @@ export function MedicationTable() {
                     </TableCell>
                     <TableCell>
                       <Guard permission="farmacia.inventario">
-                        <Button size="sm" variant="ghost" onClick={() => setAdjusting(m)}>Ajustar</Button>
+                        {dataSource === "mock" || m.lots?.some((lot) => lot.qty > 0) ? <Button size="sm" variant="ghost" onClick={() => setAdjusting(m)}>Ajustar</Button> : <span className="text-xs text-muted-foreground">Sin lote con stock</span>}
                       </Guard>
                     </TableCell>
                   </TableRow>

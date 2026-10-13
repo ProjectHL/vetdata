@@ -26,6 +26,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ownerName } from "@/domain/owners";
 import { type AccessGrant, type GrantStatus, grantStatus } from "@/domain/sharing";
 import { formatDate, formatRut, useToday } from "@/lib/format";
+import { dataSource } from "@/services";
 import { useCurrentClinic, useOwners, usePatients } from "@/lib/server-state";
 import { useStore } from "@/lib/store";
 import { EmptyState } from "@/components/layout/empty-state";
@@ -33,6 +34,7 @@ import { EmptyState } from "@/components/layout/empty-state";
 const statusVariant: Record<GrantStatus, "default" | "secondary" | "outline"> = {
   Vigente: "default",
   Vencido: "secondary",
+  Suspendido: "secondary",
   Revocado: "outline",
 };
 
@@ -78,7 +80,9 @@ function SharedByMe({ grants }: { grants: AccessGrant[] }) {
       <CardContent className="flex flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-muted-foreground">
-            Pacientes de tu clínica que otras clínicas pueden ver. Puedes revocar el acceso en cualquier momento.
+            {dataSource === "http"
+              ? "Pacientes de tu clínica con acceso autorizado por el dueño. La suspensión por causa aún no está conectada en esta pantalla."
+              : "Pacientes de tu clínica que otras clínicas pueden ver. Puedes revocar el acceso en cualquier momento."}
           </p>
           <Select value={status} onValueChange={(v) => setStatus(v as typeof status)}>
             <SelectTrigger aria-label="Filtrar por estado" className="w-full sm:w-44"><SelectValue /></SelectTrigger>
@@ -86,6 +90,7 @@ function SharedByMe({ grants }: { grants: AccessGrant[] }) {
               <SelectItem value="all">Todos los estados</SelectItem>
               <SelectItem value="Vigente">Vigente</SelectItem>
               <SelectItem value="Vencido">Vencido</SelectItem>
+              <SelectItem value="Suspendido">Suspendido</SelectItem>
               <SelectItem value="Revocado">Revocado</SelectItem>
             </SelectContent>
           </Select>
@@ -129,24 +134,24 @@ function GrantTable({
       </TableHeader>
       <TableBody>
         {grants.map((g) => {
-          const p = patients.find((p) => p.id === g.patientId)!;
-          const owner = owners.find((o) => o.rut === p.ownerRut)!;
+          const p = patients.find((p) => p.id === g.patientId);
+          const owner = p ? owners.find((o) => o.rut === p.ownerRut) : undefined;
           const status = grantStatus(g, today);
           return (
             <TableRow key={g.id}>
               <TableCell>
                 <span className="flex items-center gap-2">
-                  <SpeciesIcon species={p.species} className="size-4 text-primary" />
-                  {status === "Vigente" ? (
+                  {p && <SpeciesIcon species={p.species} className="size-4 text-primary" />}
+                  {status === "Vigente" && p ? (
                     <Link href={`/pacientes/historial/${p.id}`} className="font-medium hover:text-primary hover:underline">{p.name}</Link>
                   ) : (
-                    <span className="font-medium">{p.name}</span>
+                    <span className="font-medium">{p?.name ?? "Paciente no disponible"}</span>
                   )}
                 </span>
               </TableCell>
               <TableCell>
-                {ownerName(owner)}
-                <span className="block text-xs text-muted-foreground tabular-nums">{formatRut(owner.rut)}</span>
+                {owner ? ownerName(owner) : "Dueño no disponible"}
+                {owner && <span className="block text-xs text-muted-foreground tabular-nums">{formatRut(owner.rut)}</span>}
               </TableCell>
               <TableCell>{g[counterpart]}</TableCell>
               <TableCell>{g.scope}</TableCell>
@@ -154,7 +159,7 @@ function GrantTable({
               <TableCell className="tabular-nums">{g.until ? formatDate(g.until) : "Permanente"}</TableCell>
               <TableCell><Badge variant={statusVariant[status]}>{status}</Badge></TableCell>
               <TableCell className="text-right">
-                {canRevoke && status === "Vigente" && (
+                {dataSource === "mock" && canRevoke && status === "Vigente" && (
                   <Guard permission="red.revocar">
                     <Button size="sm" variant="outline" className="text-destructive" onClick={() => revokeGrant(g.id)}>
                       Revocar

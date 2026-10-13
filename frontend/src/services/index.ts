@@ -2,8 +2,8 @@
  * Punto de entrada de la capa de servicios.
  *
  * `NEXT_PUBLIC_DATA_SOURCE` elige la implementación (se inyecta en build):
- * - "mock" (por defecto): en memoria sobre `src/mocks`.
- * - "http": cliente de la API real (`./http`, hoy esqueleto).
+ * - "mock": demo en memoria sobre `src/mocks` (solo si se solicita explícitamente).
+ * - "http" (por defecto): cliente de la API real (`./http`).
  *
  * Los stores importan `services` y llaman a sus operaciones después de aplicar
  * la actualización optimista local (ver `runInBackground`).
@@ -15,7 +15,7 @@ import { mockServices } from "./mock";
 export type * from "./contracts";
 export { newIdempotencyKey } from "./http/client";
 
-export const dataSource: "mock" | "http" = process.env.NEXT_PUBLIC_DATA_SOURCE === "http" ? "http" : "mock";
+export const dataSource: "mock" | "http" = process.env.NEXT_PUBLIC_DATA_SOURCE === "mock" ? "mock" : "http";
 
 export const services: Services = dataSource === "http" ? httpServices : mockServices;
 

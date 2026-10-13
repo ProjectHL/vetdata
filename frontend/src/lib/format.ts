@@ -7,8 +7,8 @@ export const NOW_TIME = "11:05";
 
 import { useEffect, useState } from "react";
 
-/** Verdadero solo con `NEXT_PUBLIC_DATA_SOURCE=http` (se inyecta en build). */
-const isServerMode = process.env.NEXT_PUBLIC_DATA_SOURCE === "http";
+/** El modo real es el predeterminado; la demo requiere `mock` explícito. */
+const isServerMode = process.env.NEXT_PUBLIC_DATA_SOURCE !== "mock";
 
 const pad2 = (n: number) => String(n).padStart(2, "0");
 

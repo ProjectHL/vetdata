@@ -73,6 +73,9 @@ type SecurityStore = {
 };
 
 const SecurityContext = createContext<SecurityStore | null>(null);
+const unavailableSettings: SecuritySettings = {
+  retentionDays: 30, privacyInBoxes: true, afterHoursFrom: "", afterHoursTo: "", autoArm: false, alarmArmed: false,
+};
 
 let seq = 0;
 const newId = (prefix: string) => `${prefix}-new-${++seq}`;
@@ -88,15 +91,15 @@ function getOwner(rut: string) {
 }
 
 export function SecurityProvider({ children }: { children: React.ReactNode }) {
-  const { currentUser, role, appointments, rooms, updateRoom } = useStore();
-  // Sin endpoints en el backend (NotImplemented: cámaras, dispositivos, NVR, auditoría): se conserva la semilla mock.
-  const [cameras, setCameras] = useState(seedCameras);
-  const [devices, setDevices] = useState(seedDevices);
-  const [events, setEvents] = useState(seedEvents); // http: se hidrata con services.security.listEvents()
-  const [access, setAccess] = useState(seedAccess); // http: se hidrata con services.security.listAccess()
-  const [waiting, setWaiting] = useState(seedWaiting); // http: se hidrata con services.security.listWaiting()
-  const [audit, setAudit] = useState(seedAudit);
-  const [settings, setSettings] = useState(seedSecuritySettings); // http: se hidrata con services.security.getSettings()
+  const { currentUser, role, rolePermissions, appointments, rooms, updateRoom } = useStore();
+  // Sin endpoints en el backend para cámaras, dispositivos, NVR y auditoría.
+  const [cameras, setCameras] = useState(dataSource === "http" ? [] : seedCameras);
+  const [devices, setDevices] = useState(dataSource === "http" ? [] : seedDevices);
+  const [events, setEvents] = useState(dataSource === "http" ? [] : seedEvents);
+  const [access, setAccess] = useState(dataSource === "http" ? [] : seedAccess);
+  const [waiting, setWaiting] = useState(dataSource === "http" ? [] : seedWaiting);
+  const [audit, setAudit] = useState(dataSource === "http" ? [] : seedAudit);
+  const [settings, setSettings] = useState(dataSource === "http" ? unavailableSettings : seedSecuritySettings);
 
   // Hidratación inicial solo en modo http; en mock la semilla es el estado final.
   const [loading, setLoading] = useState(dataSource === "http");
@@ -106,11 +109,13 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
   const load = useCallback(async () => {
     if (dataSource !== "http") return;
     try {
+      const permitted = (permission: "seguridad.ver" | "agenda.gestionar") =>
+        rolePermissions[currentUser.role]?.includes(permission) ?? false;
       const [eventsData, accessData, waitingData, settingsData] = await Promise.all([
-        services.security.listEvents(),
-        services.security.listAccess(),
-        services.security.listWaiting(),
-        services.security.getSettings(),
+        permitted("seguridad.ver") ? services.security.listEvents() : Promise.resolve([]),
+        permitted("agenda.gestionar") ? services.security.listAccess() : Promise.resolve([]),
+        permitted("agenda.gestionar") ? services.security.listWaiting() : Promise.resolve([]),
+        permitted("seguridad.ver") ? services.security.getSettings() : Promise.resolve(unavailableSettings),
       ]);
       setEvents(eventsData);
       setAccess(accessData);
@@ -121,7 +126,7 @@ export function SecurityProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [currentUser.role, rolePermissions]);
 
   useEffect(() => {
     // Hidratación inicial al montar: el fetch resuelve en continuaciones async, no es un render en cascada.

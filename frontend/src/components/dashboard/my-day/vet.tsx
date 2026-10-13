@@ -13,6 +13,7 @@ import { minutesSince, useNowTime, useToday } from "@/lib/format";
 import { appointmentStage, stageStyle, todayAppointments } from "@/lib/metrics/day";
 import { useSecurity } from "@/lib/security-store";
 import { useCan, useStore } from "@/lib/store";
+import { dataSource } from "@/services";
 import { cn } from "@/lib/utils";
 import { LinkTile, MyTasksCard } from "./shared";
 
@@ -29,7 +30,7 @@ export function VetDay() {
   // T5-5: fecha real tras el montaje en modo http (fijo en mock/SSR, sin mismatch).
   const today = useToday();
   const now = useNowTime();
-  const mine = todayAppointments(appointments, today).filter((a) => a.doctorId === myId && a.status !== "Cancelada");
+  const mine = todayAppointments(appointments, today).filter((a) => a.doctorId === myId && a.status !== "Cancelada" && getPatient(a.patientId));
   const stageOf = (a: (typeof mine)[number]) => appointmentStage(a, waiting, rooms, today, now);
   const myRoom = rooms.find((r) => r.status === "ocupado" && r.doctorId === myId);
   const current = myRoom ? getPatient(myRoom.patientId ?? "") : undefined;
@@ -40,10 +41,10 @@ export function VetDay() {
   return (
     <div className="flex flex-col gap-6">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <LinkTile icon={CalendarDays} label="Mis citas de hoy" value={mine.length} hint={`${mine.filter((a) => stageOf(a) === "Realizada").length} realizadas`} href="/inicio/agenda" />
-        <LinkTile icon={Clock} label="Esperándome" value={mine.filter((a) => stageOf(a) === "En espera").length} hint="En sala de espera" href="/seguridad/sala-espera" tone="text-amber-600 dark:text-amber-400" />
-        <LinkTile icon={Pill} label="Mis recetas sin dispensar" value={myReferrals.length} hint="Derivadas a farmacia interna" href="/farmacia/movimientos" tone="text-muted-foreground" />
-        {can("red.aprobar") && (
+        {(dataSource === "mock" || can("agenda.gestionar")) && <LinkTile icon={CalendarDays} label="Mis citas de hoy" value={mine.length} hint={`${mine.filter((a) => stageOf(a) === "Realizada").length} realizadas`} href="/inicio/agenda" />}
+        {(dataSource === "mock" || can("agenda.gestionar")) && <LinkTile icon={Clock} label="Esperándome" value={mine.filter((a) => stageOf(a) === "En espera").length} hint="En sala de espera" href="/seguridad/sala-espera" tone="text-amber-600 dark:text-amber-400" />}
+        {(dataSource === "mock" || can("farmacia.inventario")) && <LinkTile icon={Pill} label="Mis recetas sin dispensar" value={myReferrals.length} hint="Derivadas a farmacia interna" href="/farmacia/movimientos" tone="text-muted-foreground" />}
+        {dataSource === "mock" && can("red.aprobar") && (
           <LinkTile icon={Building2} label="Solicitudes de la red" value={pendingRequests} hint="Por responder" href="/clinicas/solicitudes" tone="text-muted-foreground" />
         )}
       </div>
@@ -55,13 +56,14 @@ export function VetDay() {
               <CardTitle>Mi agenda de hoy</CardTitle>
               <CardDescription>Estado real: sala de espera, box y atención</CardDescription>
             </div>
-            <Button size="sm" variant="ghost" asChild><Link href="/inicio/agenda">Abrir agenda</Link></Button>
+            {(dataSource === "mock" || can("agenda.gestionar")) && <Button size="sm" variant="ghost" asChild><Link href="/inicio/agenda">Abrir agenda</Link></Button>}
           </CardHeader>
           <CardContent>
             {mine.length === 0 && <p className="text-sm text-muted-foreground">No tienes citas hoy.</p>}
             <ol className="relative flex flex-col gap-3 border-l pl-5">
               {mine.map((a) => {
                 const p = getPatient(a.patientId)!;
+                const owner = getOwner(p.ownerRut);
                 const s = stageOf(a);
                 const w = waiting.find((x) => x.appointmentId === a.id);
                 const box = freeBoxes.find((b) => b.id === a.roomId) ?? freeBoxes[0];
@@ -73,7 +75,7 @@ export function VetDay() {
                       <SpeciesIcon species={p.species} className="size-4" />
                       <div className="min-w-0 flex-1">
                         <Link href={`/pacientes/historial/${p.id}`} className="font-medium hover:underline">{p.name}</Link>
-                        <span className="text-muted-foreground"> · {a.reason} · {ownerName(getOwner(p.ownerRut)!)}</span>
+                    <span className="text-muted-foreground"> · {a.reason}{owner ? ` · ${ownerName(owner)}` : ""}</span>
                         {w?.alert && <p className="text-xs text-amber-700 dark:text-amber-300">{w.alert}</p>}
                       </div>
                         <Badge variant="outline">{s}{w && ` · ${minutesSince(w.arrivedAt, now)} min`}</Badge>

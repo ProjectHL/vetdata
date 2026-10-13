@@ -55,7 +55,7 @@ export function Catalog() {
       (!q || [p.name, p.brand, p.sku].some((v) => v.toLowerCase().includes(q)))
   );
   const stockValue = products.reduce((s, p) => s + totalStock(p) * p.cost, 0);
-  const avgMargin = Math.round(products.reduce((s, p) => s + margin(p), 0) / products.length);
+  const avgMargin = products.length ? Math.round(products.reduce((s, p) => s + margin(p), 0) / products.length) : 0;
   const alerts = products.filter((p) => stockLevel(p) !== "OK").length;
   const sold = (id: string) => sales.flatMap((s) => s.items).filter((i) => i.productId === id).reduce((s, i) => s + i.qty, 0);
 
